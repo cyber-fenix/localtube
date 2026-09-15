@@ -18,6 +18,7 @@ import { nativeSkinOn } from '@/content/native-skin';
 import { flashToast } from '@/content/toast';
 import { getData } from '@/lib/store';
 import { resolveTitle, toggleSubscription } from '@/lib/subscriptions';
+import { t } from '@/lib/i18n';
 
 const CLASS = 'lt-follow-anywhere';
 
@@ -105,7 +106,7 @@ async function openChannelsPopover(button: HTMLElement, channels: ChannelRef[]):
 
     const heading = document.createElement('div');
     heading.className = 'lt-popover-head';
-    heading.textContent = `Follow ${channels.length} channels`;
+    heading.textContent = t('popover_follow_n_channels', String(channels.length));
     popover.appendChild(heading);
 
     for (const channel of channels) {
@@ -128,7 +129,7 @@ async function openChannelsPopover(button: HTMLElement, channels: ChannelRef[]):
       const toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'lt-native lt-native-subscribe lt-accent';
-      toggle.textContent = following ? 'Subscribed' : 'Subscribe';
+      toggle.textContent = t(following ? 'subscribed_label' : 'action_subscribe');
       toggle.setAttribute('aria-pressed', String(following));
       toggle.addEventListener('click', async () => {
         toggle.disabled = true;
@@ -168,12 +169,12 @@ document.addEventListener('keydown', (event) => {
 });
 
 function paint(button: HTMLButtonElement, following: boolean, native: boolean): void {
-  const label = native ? (following ? 'Subscribed' : 'Subscribe') : following ? 'Following' : 'Follow';
+  const label = native
+    ? t(following ? 'subscribed_label' : 'action_subscribe')
+    : t(following ? 'action_following' : 'action_follow');
   if (button.textContent !== label) button.textContent = label;
   button.setAttribute('aria-pressed', String(following));
-  button.title = following
-    ? 'Following in LocalTube — stored in this browser, not on a Google account'
-    : 'Follow in LocalTube — stored in this browser, not on a Google account';
+  button.title = t(following ? 'follow_title_following' : 'follow_title_not_following');
 }
 
 export async function mountSubscribeEverywhere(): Promise<void> {
@@ -243,7 +244,7 @@ export async function mountSubscribeEverywhere(): Promise<void> {
             ])
           : null;
         const name = resolved ?? nameOf(channel, subscriptions[channel.id]);
-        flashToast(following ? `Following ${name} in LocalTube` : `Unfollowed ${name}`);
+        flashToast(t(following ? 'toast_following_channel' : 'toast_unfollowed_channel', name));
       } finally {
         button.disabled = false;
       }

@@ -9,6 +9,7 @@
 import { anchor, currentRoute, currentVideoId, generation, waitForAnchor } from '@/content/youtube-dom';
 import { getPlaylist } from '@/lib/playlists';
 import { readShuffle } from '@/lib/shuffle';
+import { t } from '@/lib/i18n';
 import type { Playlist } from '@/types';
 
 const BAR_ID = 'localtube-queue';
@@ -74,31 +75,32 @@ export async function mountQueue(): Promise<void> {
   bar.replaceChildren();
 
   const label = document.createElement('span');
-  const position = index >= 0 ? `${index + 1} of ${sequence.length}` : 'not in this playlist';
+  const position =
+    index >= 0 ? t('queue_position', [String(index + 1), String(sequence.length)]) : t('queue_not_in_playlist');
   label.append(
-    document.createTextNode('Playing from '),
+    document.createTextNode(t('queue_playing_from_prefix')),
     Object.assign(document.createElement('strong'), { textContent: playlist.name }),
-    document.createTextNode(` · ${position}${order ? ' · shuffled' : ''}`),
+    document.createTextNode(` · ${position}${order ? ` · ${t('queue_shuffled_suffix')}` : ''}`),
   );
   bar.appendChild(label);
 
   if (next) {
     const nextLink = document.createElement('a');
     nextLink.href = watchUrl(next.id, playlist.id);
-    nextLink.textContent = `Next: ${next.title}`;
+    nextLink.textContent = t('queue_next', next.title);
     nextLink.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
     bar.appendChild(nextLink);
   } else {
     const done = document.createElement('span');
     done.style.flex = '1';
-    done.textContent = 'End of playlist';
+    done.textContent = t('queue_end');
     bar.appendChild(done);
   }
 
   const stop = document.createElement('button');
   stop.type = 'button';
   stop.className = 'lt-btn';
-  stop.textContent = 'Stop';
+  stop.textContent = t('action_stop');
   stop.addEventListener('click', () => {
     history.replaceState(null, '', location.pathname + location.search);
     removeBar();

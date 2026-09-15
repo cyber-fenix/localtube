@@ -10,6 +10,7 @@
 
 import { getData, getFeedCache, putFeedCache, updateData } from '@/lib/store';
 import { noteNewUploads } from '@/lib/notifications';
+import { t } from '@/lib/i18n';
 import type { FeedCache, Video } from '@/types';
 
 const NS = {
@@ -97,7 +98,7 @@ function text(parent: Element, ns: string, name: string): string {
 
 function parseFeed(xml: string, channelId: string): Video[] {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length > 0) throw new Error('malformed feed');
+  if (doc.getElementsByTagName('parsererror').length > 0) throw new Error(t('error_malformed_feed'));
 
   const channelTitle =
     doc.getElementsByTagNameNS(NS.atom, 'title')[0]?.textContent?.trim() ?? channelId;
@@ -146,7 +147,7 @@ export async function fetchChannelTitle(channelId: string): Promise<string | nul
 
 export async function fetchChannelFeed(channelId: string): Promise<Video[]> {
   const response = await fetch(feedUrl(channelId), { credentials: 'omit' });
-  if (!response.ok) throw new Error(`feed ${response.status}`);
+  if (!response.ok) throw new Error(t('error_feed_status', String(response.status)));
   return parseFeed(await response.text(), channelId);
 }
 
@@ -300,7 +301,7 @@ export async function loadFeed(
           ...cache[channelId],
           fetchedAt: Date.now(),
           videos: cache[channelId]?.videos ?? [],
-          error: error instanceof Error ? error.message : 'fetch failed',
+          error: error instanceof Error ? error.message : t('error_fetch_failed'),
         };
         status.failed.push(channelId);
       }

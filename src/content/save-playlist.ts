@@ -18,6 +18,7 @@ import { PlaylistUnavailable, savePlaylistFromYouTube, savedFromYouTube } from '
 import { innertubeAvailable } from '@/lib/innertube';
 import { PATHS, icon } from '@/ui/icons';
 import { viewHash } from '@/ui/views';
+import { t } from '@/lib/i18n';
 
 export const SAVE_PLAYLIST_ID = 'localtube-save-playlist';
 
@@ -55,43 +56,41 @@ async function mountSavePlaylistOnce(): Promise<void> {
     // pressing it does now, which is refresh rather than save again.
     button.replaceChildren(
       icon(saved ? PATHS.bookmark : PATHS.save),
-      document.createTextNode(saved ? 'Update in LocalTube' : 'Save to LocalTube'),
+      document.createTextNode(t(saved ? 'action_update_in_localtube' : 'action_save_to_localtube')),
     );
-    button.title = saved
-      ? 'Read this playlist again and update the LocalTube copy'
-      : 'Copy this playlist into LocalTube — stored in this browser, not on a Google account';
+    button.title = t(saved ? 'save_playlist_title_saved' : 'save_playlist_title_unsaved');
   };
 
   paint((await savedFromYouTube(playlistId)) !== undefined);
 
   button.onclick = async () => {
     button.disabled = true;
-    showToast('Reading this playlist from YouTube…', { spinner: true });
+    showToast(t('toast_reading_playlist'), { spinner: true });
     try {
       const result = await savePlaylistFromYouTube(playlistId, (loaded) => {
-        showToast(`Reading this playlist from YouTube… ${loaded} videos`, { spinner: true });
+        showToast(t('toast_reading_playlist_progress', String(loaded)), { spinner: true });
       });
       paint(true);
       hideToast();
 
       const what = result.added === result.total
-        ? `Saved ${result.total} video${result.total === 1 ? '' : 's'} as "${result.playlist.name}"`
+        ? t('toast_saved_playlist_all', [String(result.total), result.playlist.name])
         : result.added > 0
-          ? `Added ${result.added} new video${result.added === 1 ? '' : 's'} to "${result.playlist.name}"`
-          : `"${result.playlist.name}" is already up to date`;
+          ? t('toast_added_playlist_partial', [String(result.added), result.playlist.name])
+          : t('toast_playlist_up_to_date', result.playlist.name);
       // Said plainly rather than hidden: the run stopped at its page cap or at
       // a rate limit, so what was saved is not the whole playlist.
       const truncated = !result.complete
         ? result.rateLimited
-          ? ' — YouTube rate-limited us, so some videos are missing'
-          : ' — the first part of a long playlist'
+          ? t('truncated_rate_limited')
+          : t('truncated_partial')
         : '';
-      actionToast(what + truncated, 'Open in LocalTube', () => {
+      actionToast(what + truncated, t('action_open_in_localtube'), () => {
         location.href = `/${viewHash({ name: 'playlist', id: result.playlist.id })}`;
       });
     } catch (error) {
       flashToast(
-        error instanceof PlaylistUnavailable ? error.message : 'Could not save this playlist',
+        error instanceof PlaylistUnavailable ? error.message : t('toast_could_not_save_playlist'),
         4000,
         { error: true },
       );

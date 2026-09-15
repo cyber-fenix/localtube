@@ -18,6 +18,7 @@
 // against the documented values above and confined to BAR_STYLE.
 
 import { signedIn } from '@/content/account';
+import { t } from '@/lib/i18n';
 
 export const BAR_ID = 'localtube-account-bar';
 const STYLE_ID = 'localtube-account-bar-style';
@@ -172,25 +173,25 @@ export function syncAccountBar(): void {
 
   const text = document.createElement('span');
   text.className = 'lt-bar-text';
-  text.append('YouTube is signed in — LocalTube is read-only until you sign out. ');
+  text.append(`${t('account_bar_signed_in')} `);
   const takeout = document.createElement('a');
   takeout.href = TAKEOUT_URL;
   takeout.target = '_blank';
   takeout.rel = 'noopener';
-  takeout.textContent = 'Export your subscriptions from Google Takeout';
+  takeout.textContent = t('account_bar_takeout_link');
   text.appendChild(takeout);
   // The export is only half the job, and the half that is easy to leave
   // unfinished: the file does nothing until it is imported. A content script
   // cannot open the popup for them, so the sentence says where it is.
-  text.append(', then import the file from the LocalTube popup.');
+  text.append(`, ${t('account_bar_import_reminder')}`);
   bar.appendChild(text);
 
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'lt-bar-close';
   close.textContent = '×';
-  close.title = 'Dismiss for now';
-  close.setAttribute('aria-label', 'Dismiss for now');
+  close.title = t('action_dismiss_for_now');
+  close.setAttribute('aria-label', t('action_dismiss_for_now'));
   close.addEventListener('click', () => {
     setDismissed(true);
     syncAccountBar();

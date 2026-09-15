@@ -19,6 +19,7 @@
 import { InnertubeRateLimited, innertubeAvailable, playlistViaInnertube } from '@/lib/innertube';
 import { parseAge, parseDuration, parseViews } from '@/lib/parse';
 import { getData, updateData } from '@/lib/store';
+import { t } from '@/lib/i18n';
 import type { Playlist, Video } from '@/types';
 
 /**
@@ -71,7 +72,7 @@ export async function savePlaylistFromYouTube(
   playlistId: string,
   onProgress?: (loaded: number) => void,
 ): Promise<ImportResult> {
-  if (!innertubeAvailable()) throw new PlaylistUnavailable('LocalTube cannot read this page yet');
+  if (!innertubeAvailable()) throw new PlaylistUnavailable(t('error_cannot_read_page_yet'));
 
   const collected: Video[] = [];
   const seen = new Set<string>();
@@ -87,7 +88,7 @@ export async function savePlaylistFromYouTube(
       // deleted, private, or a malformed id. A LATER page failing is a
       // genuine error mid-walk, so it keeps what we have and says so.
       if (!result) {
-        if (page === 0) throw new PlaylistUnavailable('This playlist could not be read');
+        if (page === 0) throw new PlaylistUnavailable(t('error_playlist_could_not_be_read'));
         break;
       }
       // A page with no videos is the end. Every playlist shorter than one
@@ -131,10 +132,10 @@ export async function savePlaylistFromYouTube(
     if (error instanceof PlaylistUnavailable) throw error;
     if (!(error instanceof InnertubeRateLimited)) throw error;
     rateLimited = true;
-    if (collected.length === 0) throw new PlaylistUnavailable('YouTube is rate-limiting LocalTube');
+    if (collected.length === 0) throw new PlaylistUnavailable(t('error_youtube_rate_limiting'));
   }
 
-  if (collected.length === 0) throw new PlaylistUnavailable('This playlist has nothing to save');
+  if (collected.length === 0) throw new PlaylistUnavailable(t('error_playlist_nothing_to_save'));
 
   const now = Date.now();
   const result = await updateData((data) => {

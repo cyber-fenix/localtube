@@ -14,22 +14,21 @@ import { readContext, waitForContext } from '@/content/page-context';
 import { singleFlight } from '@/content/single-flight';
 import { flashToast } from '@/content/toast';
 import { isSubscribed, noteChannelDetails, toggleSubscription } from '@/lib/subscriptions';
+import { t } from '@/lib/i18n';
 
 const BUTTON_ID = 'localtube-follow';
 
 function paint(button: HTMLButtonElement, following: boolean, native: boolean): void {
   const label = native
     ? following
-      ? 'Subscribed'
-      : 'Subscribe'
+      ? t('subscribed_label')
+      : t('action_subscribe')
     : following
-      ? 'Following'
-      : 'Follow';
+      ? t('action_following')
+      : t('action_follow');
   if (button.textContent !== label) button.textContent = label;
   button.setAttribute('aria-pressed', String(following));
-  button.title = following
-    ? 'Following in LocalTube — stored in this browser, not on a Google account'
-    : 'Follow in LocalTube — stored in this browser, not on a Google account';
+  button.title = t(following ? 'follow_title_following' : 'follow_title_not_following');
 }
 
 /**
@@ -91,9 +90,7 @@ async function mountSubscribeButtonOnce(): Promise<void> {
     try {
       const following = await toggleSubscription(channel);
       paint(button, following, native);
-      flashToast(
-        following ? `Following ${channel.title} in LocalTube` : `Unfollowed ${channel.title}`,
-      );
+      flashToast(t(following ? 'toast_following_channel' : 'toast_unfollowed_channel', channel.title));
     } finally {
       button.disabled = false;
     }

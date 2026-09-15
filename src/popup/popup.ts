@@ -1,7 +1,10 @@
 import { backupFilename, exportBackup, importBackup, type ImportMode } from '@/lib/backup';
+import { localizeDocument, t } from '@/lib/i18n';
 import { getData, setSettings } from '@/lib/store';
 import { addMany } from '@/lib/subscriptions';
 import { parseTakeoutCsv } from '@/lib/takeout';
+
+localizeDocument();
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -32,7 +35,7 @@ function askInStatus<T>(question: string, choices: [string, T][]): Promise<T | n
     }
     const cancel = document.createElement('button');
     cancel.className = 'btn btn-link';
-    cancel.textContent = 'Cancel';
+    cancel.textContent = t('popup_cancel');
     cancel.addEventListener('click', () => resolve(null));
     row.appendChild(cancel);
     statusEl.appendChild(row);
@@ -64,34 +67,34 @@ function openYouTube(hash: string): void {
 
 $<HTMLInputElement>('replaceHome').addEventListener('change', async (event) => {
   await setSettings({ replaceHome: (event.target as HTMLInputElement).checked });
-  setStatus('Saved. Reload any open YouTube tab to see the change.');
+  setStatus(t('popup_saved_reload'));
 });
 
 $<HTMLInputElement>('nativeSkin').addEventListener('change', async (event) => {
   await setSettings({ nativeSkin: (event.target as HTMLInputElement).checked });
-  setStatus('Saved. Reload any open YouTube tab to see the change.');
+  setStatus(t('popup_saved_reload'));
 });
 
 $<HTMLInputElement>('recordHistory').addEventListener('change', async (event) => {
   await setSettings({ recordHistory: (event.target as HTMLInputElement).checked });
-  setStatus('Saved. Existing history is kept; clear it from the History page.');
+  setStatus(t('popup_saved_history_kept'));
 });
 
 $<HTMLInputElement>('notifyUploads').addEventListener('change', async (event) => {
   await setSettings({ notifyUploads: (event.target as HTMLInputElement).checked });
-  setStatus('Saved. Reload any open YouTube tab to see the change.');
+  setStatus(t('popup_saved_reload'));
 });
 
 $<HTMLInputElement>('hideShorts').addEventListener('change', async (event) => {
   await setSettings({ hideShorts: (event.target as HTMLInputElement).checked });
-  setStatus('Saved. Reload any open YouTube tab to see the change.');
+  setStatus(t('popup_saved_reload'));
 });
 
 $<HTMLInputElement>('feedTtlMinutes').addEventListener('change', async (event) => {
   const minutes = Number((event.target as HTMLInputElement).value);
   if (!Number.isFinite(minutes) || minutes < 1) return;
   await setSettings({ feedTtlMinutes: Math.min(minutes, 1440) });
-  setStatus('Saved.');
+  setStatus(t('popup_saved'));
 });
 
 $<HTMLAnchorElement>('open-feed').addEventListener('click', (event) => {
@@ -115,7 +118,7 @@ $<HTMLButtonElement>('export').addEventListener('click', async () => {
   link.click();
   // Revoke after the download has had a chance to start.
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  setStatus(`Exported ${backupFilename()}.`);
+  setStatus(t('popup_exported', backupFilename()));
 });
 
 $<HTMLButtonElement>('import').addEventListener('click', () => $<HTMLInputElement>('file-backup').click());
@@ -127,27 +130,29 @@ $<HTMLInputElement>('file-backup').addEventListener('change', async (event) => {
   input.value = ''; // let the same file be picked again after a cancel
   if (!file) return;
 
-  const mode = await askInStatus<ImportMode>(`Import ${file.name}:`, [
-    ['Merge', 'merge'],
-    ['Replace everything', 'replace'],
+  const mode = await askInStatus<ImportMode>(t('popup_import_prompt', file.name), [
+    [t('popup_import_merge'), 'merge'],
+    [t('popup_import_replace'), 'replace'],
   ]);
   if (!mode) {
-    setStatus('Import cancelled.');
+    setStatus(t('popup_import_cancelled'));
     return;
   }
-  if (mode === 'replace' && !confirm('Replace all LocalTube data in this browser? This cannot be undone.'))
-    return;
+  if (mode === 'replace' && !confirm(t('popup_import_replace_confirm'))) return;
 
   try {
     const summary = await importBackup(await file.text(), mode);
     await refresh();
     setStatus(
-      `Imported ${summary.subscriptions} channel${summary.subscriptions === 1 ? '' : 's'}, ` +
-        `${summary.playlists} playlist${summary.playlists === 1 ? '' : 's'}, ${summary.videos} videos, ` +
-        `${summary.history} history entries.`,
+      t('popup_import_summary', [
+        String(summary.subscriptions),
+        String(summary.playlists),
+        String(summary.videos),
+        String(summary.history),
+      ]),
     );
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : 'Import failed.', { error: true });
+    setStatus(error instanceof Error ? error.message : t('popup_import_failed'), { error: true });
   }
 });
 
@@ -160,19 +165,14 @@ $<HTMLInputElement>('file-takeout').addEventListener('change', async (event) => 
   try {
     const channels = parseTakeoutCsv(await file.text());
     if (channels.length === 0) {
-      setStatus('No channels found in that file. Pick the subscriptions.csv from Takeout.', {
-        error: true,
-      });
+      setStatus(t('popup_takeout_empty'), { error: true });
       return;
     }
     const added = await addMany(channels);
     await refresh();
-    setStatus(
-      `Found ${channels.length} channels, added ${added} new one${added === 1 ? '' : 's'}. ` +
-        'Open your feed to load them.',
-    );
+    setStatus(t('popup_takeout_summary', [String(channels.length), String(added)]));
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : 'Import failed.', { error: true });
+    setStatus(error instanceof Error ? error.message : t('popup_import_failed'), { error: true });
   }
 });
 

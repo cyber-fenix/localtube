@@ -10,14 +10,15 @@ import { nativeSkinOn } from '@/content/native-skin';
 import { singleFlight } from '@/content/single-flight';
 import { PATHS, icon } from '@/ui/icons';
 import { go, type View } from '@/ui/views';
+import { t } from '@/lib/i18n';
 
 export const AVATAR_ID = 'localtube-avatar';
 const MENU_ID = 'localtube-account-menu';
 
-const LINKS: [View, string][] = [
-  [{ name: 'feed' }, 'My feed'],
-  [{ name: 'subscriptions' }, 'Following'],
-  [{ name: 'playlists' }, 'Playlists'],
+const links = (): [View, string][] => [
+  [{ name: 'feed' }, t('nav_my_feed')],
+  [{ name: 'subscriptions' }, t('nav_following_link')],
+  [{ name: 'playlists' }, t('playlists_page_title')],
 ];
 
 export function closeMenu(): void {
@@ -41,11 +42,11 @@ function openMenu(avatar: HTMLElement): void {
   name.textContent = 'LocalTube';
   const sub = document.createElement('div');
   sub.className = 'lt-account-sub';
-  sub.textContent = 'Local profile — this browser only, not a Google account';
+  sub.textContent = t('account_menu_sub');
   head.append(name, sub);
   menu.appendChild(head);
 
-  for (const [view, label] of LINKS) {
+  for (const [view, label] of links()) {
     const link = document.createElement('a');
     link.href = '#';
     link.textContent = label;
@@ -95,8 +96,8 @@ async function mountMastheadOnce(): Promise<void> {
   const avatar = document.createElement('button');
   avatar.id = AVATAR_ID;
   avatar.type = 'button';
-  avatar.title = 'LocalTube — local profile, not a Google account';
-  avatar.setAttribute('aria-label', 'LocalTube profile');
+  avatar.title = t('avatar_title');
+  avatar.setAttribute('aria-label', t('avatar_aria_label'));
   avatar.append(icon(PATHS.play));
   avatar.addEventListener('click', () => {
     if (document.getElementById(MENU_ID)) closeMenu();

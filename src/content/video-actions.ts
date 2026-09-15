@@ -23,6 +23,7 @@ import {
   toggleLike,
 } from '@/lib/playlists';
 import { PATHS, icon, setIconPath } from '@/ui/icons';
+import { t } from '@/lib/i18n';
 import type { Video } from '@/types';
 
 export const ROW_ID = 'localtube-actions';
@@ -109,7 +110,7 @@ async function openSavePopover(button: HTMLElement, video: Video): Promise<void>
       item.addEventListener('click', async () => {
         if (checked) await removeFromPlaylist(playlist.id, video.id);
         else await addToPlaylist(playlist.id, video);
-        flashToast(checked ? `Removed from ${playlist.name}` : `Saved to ${playlist.name}`);
+        flashToast(t(checked ? 'toast_removed_from' : 'toast_saved_to', playlist.name));
         await render();
       });
       popover.appendChild(item);
@@ -117,19 +118,19 @@ async function openSavePopover(button: HTMLElement, video: Video): Promise<void>
 
     const form = document.createElement('form');
     const input = document.createElement('input');
-    input.placeholder = 'New playlist…';
-    input.setAttribute('aria-label', 'New playlist name');
+    input.placeholder = t('action_new_playlist_ellipsis');
+    input.setAttribute('aria-label', t('new_playlist_name_aria'));
     const add = document.createElement('button');
     add.type = 'submit';
     add.className = 'lt-btn';
-    add.textContent = 'Create';
+    add.textContent = t('action_create');
     form.append(input, add);
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!input.value.trim()) return;
       const playlist = await createPlaylist(input.value);
       await addToPlaylist(playlist.id, video);
-      flashToast(`Saved to ${playlist.name}`);
+      flashToast(t('toast_saved_to', playlist.name));
       await render();
     });
     popover.appendChild(form);
@@ -226,14 +227,14 @@ async function mountVideoActionsOnce(): Promise<void> {
 
   const native = nativeSkinOn();
 
-  const LIKE_ON = 'In your local Liked list — never sent to YouTube';
-  const LIKE_OFF = 'Save to your local Liked list — never sent to YouTube';
-  const DISLIKE_ON = 'In your local Disliked list — never sent to YouTube';
-  const DISLIKE_OFF = 'Dislike locally — never sent to YouTube';
+  const LIKE_ON = t('like_on_title');
+  const LIKE_OFF = t('like_off_title');
+  const DISLIKE_ON = t('dislike_on_title');
+  const DISLIKE_OFF = t('dislike_off_title');
 
-  const like = pill(LIKE_ID, PATHS.thumbUpOutline, 'Like', native);
+  const like = pill(LIKE_ID, PATHS.thumbUpOutline, t('action_like'), native);
   const dislike = pill(DISLIKE_ID, PATHS.thumbDownOutline, '', native);
-  dislike.setAttribute('aria-label', 'Dislike');
+  dislike.setAttribute('aria-label', t('action_dislike'));
 
   const paintLike = (on: boolean): void =>
     paintThumb(like, on, PATHS.thumbUpSolid, PATHS.thumbUpOutline, LIKE_ON, LIKE_OFF);
@@ -258,8 +259,8 @@ async function mountVideoActionsOnce(): Promise<void> {
     if (disliked) pop(dislike, true);
   };
 
-  const save = pill(SAVE_ID, PATHS.save, 'Save', native);
-  save.title = 'Save to a LocalTube playlist — stored in this browser only';
+  const save = pill(SAVE_ID, PATHS.save, t('action_save'), native);
+  save.title = t('save_button_title');
   save.onclick = () => {
     if (document.getElementById(POPOVER_ID)) closePopover();
     else void openSavePopover(save, video);

@@ -6,14 +6,15 @@ import { openCardMenu, type MenuItem } from '@/ui/menu';
 import { videoMenuItems } from '@/ui/video-menu';
 import type { ProgressEntry, Video } from '@/types';
 import { resumeAt, watchedFraction } from '@/lib/progress';
+import { t } from '@/lib/i18n';
 
 /** The kebab button, wired to the shared video menu. */
 export function kebab(video: Video, extra: MenuItem[] = []): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'lt-kebab';
-  button.title = 'More actions';
-  button.setAttribute('aria-label', 'More actions');
+  button.title = t('action_more_actions');
+  button.setAttribute('aria-label', t('action_more_actions'));
   button.appendChild(icon(PATHS.kebab));
   button.addEventListener('click', (event) => {
     event.preventDefault();
@@ -98,23 +99,26 @@ export function timeAgo(iso: string): string {
   const ms = Date.now() - Date.parse(iso);
   if (!Number.isFinite(ms) || ms < 0) return '';
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${Math.max(minutes, 1)} minute${minutes === 1 ? '' : 's'} ago`;
+  if (minutes < 60) {
+    const n = Math.max(minutes, 1);
+    return t(n === 1 ? 'time_ago_minute_singular' : 'time_ago_minute_plural', String(n));
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  if (hours < 24) return t(hours === 1 ? 'time_ago_hour_singular' : 'time_ago_hour_plural', String(hours));
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  if (days < 30) return t(days === 1 ? 'time_ago_day_singular' : 'time_ago_day_plural', String(days));
   const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+  if (months < 12) return t(months === 1 ? 'time_ago_month_singular' : 'time_ago_month_plural', String(months));
   const years = Math.floor(months / 12);
-  return `${years} year${years === 1 ? '' : 's'} ago`;
+  return t(years === 1 ? 'time_ago_year_singular' : 'time_ago_year_plural', String(years));
 }
 
 export function formatViews(views?: number): string {
   if (!views || views < 0) return '';
-  if (views < 1000) return `${views} views`;
-  if (views < 1_000_000) return `${Math.round(views / 100) / 10}K views`;
-  if (views < 1_000_000_000) return `${Math.round(views / 100_000) / 10}M views`;
-  return `${Math.round(views / 100_000_000) / 10}B views`;
+  if (views < 1000) return t('views_count', String(views));
+  if (views < 1_000_000) return t('views_count_k', String(Math.round(views / 100) / 10));
+  if (views < 1_000_000_000) return t('views_count_m', String(Math.round(views / 100_000) / 10));
+  return t('views_count_b', String(Math.round(views / 100_000_000) / 10));
 }
 
 export interface CardAction {
@@ -252,7 +256,7 @@ export function shortsShelf(videos: Video[]): HTMLElement {
 
   const heading = document.createElement('h2');
   heading.className = 'lt-shorts-title';
-  heading.textContent = 'Shorts';
+  heading.textContent = t('shorts_heading');
   section.appendChild(heading);
 
   const row = document.createElement('div');

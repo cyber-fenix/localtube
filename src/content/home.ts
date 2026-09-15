@@ -10,6 +10,7 @@ import { signedIn } from '@/content/account';
 import { flashToast } from '@/content/toast';
 import { systemPlaylistId } from '@/lib/playlists';
 import { getSettings } from '@/lib/store';
+import { t } from '@/lib/i18n';
 import {
   VIEW_CHANGED,
   feedView,
@@ -76,7 +77,7 @@ export async function renderHome(): Promise<void> {
   const browse = anchor(name) ?? (await waitForAnchor(name));
   if (!browse) {
     // Never blank the page when the anchor moves: fail visibly instead.
-    flashToast('LocalTube could not attach to the YouTube homepage. Run __ltDiag() for details.', 6000, {
+    flashToast(t('toast_mount_failed'), 6000, {
       error: true,
     });
     return;

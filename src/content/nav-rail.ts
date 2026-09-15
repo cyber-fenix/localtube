@@ -22,6 +22,7 @@ import { writesAllowed } from '@/content/account';
 import { listSubscriptions } from '@/lib/subscriptions';
 import { getData, systemPlaylist } from '@/lib/store';
 import { go, viewHash, type View } from '@/ui/views';
+import { t } from '@/lib/i18n';
 
 const ENTRY_CLASS = 'localtube-guide-entry';
 export const SECTION_ID = 'localtube-guide-section';
@@ -299,7 +300,7 @@ export async function renderGuideChannels(): Promise<void> {
 
   if (channels.length > COLLAPSED) {
     const spec: EntrySpec = {
-      title: expanded ? 'Show fewer' : 'Show more',
+      title: t(expanded ? 'action_show_fewer' : 'action_show_more'),
       icon: expanded ? CHEVRON_UP : CHEVRON_DOWN,
       onClick: () => {
         expanded = !expanded;
@@ -382,11 +383,11 @@ const ICONS = {
 } as const;
 
 /** In YouTube's own order for the "You" section. */
-const LINKS: [View, string, string][] = [
-  [{ name: 'history' }, 'History', ICONS.history],
-  [{ name: 'playlists' }, 'Playlists', ICONS.playlists],
-  [{ name: 'watch-later' }, 'Watch later', ICONS.watchLater],
-  [{ name: 'liked' }, 'Liked videos', ICONS.liked],
+const navLinks = (): [View, string, string][] => [
+  [{ name: 'history' }, t('nav_history'), ICONS.history],
+  [{ name: 'playlists' }, t('playlists_page_title'), ICONS.playlists],
+  [{ name: 'watch-later' }, t('nav_watch_later'), ICONS.watchLater],
+  [{ name: 'liked' }, t('nav_liked_videos'), ICONS.liked],
 ];
 
 /** Open a LocalTube view from the sidebar, from wherever we currently are. */
@@ -460,7 +461,7 @@ export async function mountNavRail(): Promise<void> {
   after = addEntry(subs, after, headerSpec, 'link');
   specs.push([after, headerSpec]);
 
-  for (const [view, label, path] of LINKS) {
+  for (const [view, label, path] of navLinks()) {
     const spec: EntrySpec = {
       title: label,
       href: `/${viewHash(view)}`,

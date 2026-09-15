@@ -20,6 +20,7 @@ import { clearNotifications, listNotifications, markAllRead } from '@/lib/notifi
 import { getData, setSettings } from '@/lib/store';
 import { timeAgo } from '@/ui/cards';
 import { PATHS, icon } from '@/ui/icons';
+import { t } from '@/lib/i18n';
 import type { NotificationEntry } from '@/types';
 
 export const BELL_ID = 'localtube-bell';
@@ -46,7 +47,7 @@ function notificationRow(entry: NotificationEntry): HTMLElement {
   text.className = 'lt-notif-text';
   const line = document.createElement('div');
   line.className = 'lt-notif-line';
-  line.textContent = `${entry.channelTitle} uploaded: ${entry.title}`;
+  line.textContent = t('notif_uploaded', [entry.channelTitle, entry.title]);
   const when = document.createElement('div');
   when.className = 'lt-notif-when';
   when.textContent = timeAgo(entry.published);
@@ -72,15 +73,14 @@ function emptyPanel(): HTMLElement {
 
   const head = document.createElement('div');
   head.className = 'lt-notif-empty-head';
-  head.textContent = 'Your notifications live here';
+  head.textContent = t('notif_empty_head');
 
   const body = document.createElement('div');
   body.className = 'lt-notif-empty-body';
   // Says what it does AND what it cannot do. LocalTube checks for uploads
   // while you are on YouTube; claiming otherwise would be the one thing this
   // extension must never do.
-  body.textContent =
-    'New videos from channels you follow in LocalTube show up here. LocalTube checks while you have YouTube open.';
+  body.textContent = t('notif_empty_body');
 
   empty.append(bell, head, body);
   return empty;
@@ -110,11 +110,11 @@ function openSettingsMenu(gear: HTMLElement, refresh: () => void): void {
     menu.appendChild(item);
   };
 
-  add('Turn off upload notifications', async () => {
+  add(t('action_turn_off_notifications'), async () => {
     await setSettings({ notifyUploads: false });
     closeNotifications();
   });
-  add('Clear all', () => clearNotifications());
+  add(t('action_clear_all'), () => clearNotifications());
 
   document.body.appendChild(menu);
   window.setTimeout(() => {
@@ -144,7 +144,7 @@ async function buildPanel(bell: HTMLElement): Promise<void> {
   const panel = document.createElement('div');
   panel.id = PANEL_ID;
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', 'LocalTube notifications');
+  panel.setAttribute('aria-label', t('notif_brand_label'));
 
   const rect = bell.getBoundingClientRect();
   panel.style.top = `${rect.bottom + 8}px`;
@@ -156,12 +156,12 @@ async function buildPanel(bell: HTMLElement): Promise<void> {
   header.className = 'lt-notif-head';
   const title = document.createElement('div');
   title.className = 'lt-notif-title';
-  title.textContent = 'Notifications';
+  title.textContent = t('notif_panel_title');
   const gear = document.createElement('button');
   gear.type = 'button';
   gear.className = 'lt-notif-gear';
-  gear.title = 'Notification settings';
-  gear.setAttribute('aria-label', 'Notification settings');
+  gear.title = t('notif_settings_title');
+  gear.setAttribute('aria-label', t('notif_settings_title'));
   gear.appendChild(icon(PATHS.gear));
   gear.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -245,8 +245,8 @@ async function mountBellOnce(): Promise<void> {
   const bell = document.createElement('button');
   bell.id = BELL_ID;
   bell.type = 'button';
-  bell.title = 'LocalTube notifications — new videos from channels you follow here';
-  bell.setAttribute('aria-label', 'LocalTube notifications');
+  bell.title = t('bell_title');
+  bell.setAttribute('aria-label', t('notif_brand_label'));
   bell.appendChild(icon(PATHS.bell));
   paintBadge(bell, unread);
   bell.addEventListener('click', () => {

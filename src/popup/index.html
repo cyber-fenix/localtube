@@ -11,85 +11,80 @@
       <h1>LocalTube</h1>
 
       <section class="card stats">
-        <div class="stat"><strong id="stat-subs">0</strong><span>following</span></div>
-        <div class="stat"><strong id="stat-playlists">0</strong><span>playlists</span></div>
-        <div class="stat"><strong id="stat-videos">0</strong><span>saved videos</span></div>
+        <div class="stat"><strong id="stat-subs">0</strong><span data-i18n="popup_stat_following">following</span></div>
+        <div class="stat"><strong id="stat-playlists">0</strong><span data-i18n="popup_stat_playlists">playlists</span></div>
+        <div class="stat"><strong id="stat-videos">0</strong><span data-i18n="popup_stat_saved_videos">saved videos</span></div>
       </section>
 
       <div class="cta-row">
-        <a class="btn btn-primary" id="open-feed" href="#">Open my feed</a>
-        <a class="btn btn-ghost" id="open-playlists" href="#">Playlists</a>
+        <a class="btn btn-primary" id="open-feed" href="#" data-i18n="popup_open_feed">Open my feed</a>
+        <a class="btn btn-ghost" id="open-playlists" href="#" data-i18n="popup_open_playlists">Playlists</a>
       </div>
 
       <section class="card">
-        <h2>Homepage</h2>
+        <h2 data-i18n="popup_homepage_heading">Homepage</h2>
         <label class="check">
           <input type="checkbox" id="replaceHome" />
           <span>
-            Show my LocalTube feed on the homepage and Subscriptions page
-            <em class="sub">Your followed channels are also listed in YouTube's sidebar.</em>
+            <span data-i18n="opt_replace_home_label">Show my LocalTube feed on the homepage and Subscriptions page</span>
+            <em class="sub" data-i18n="opt_replace_home_sub">Your followed channels are also listed in YouTube's sidebar.</em>
           </span>
         </label>
         <label class="check">
           <input type="checkbox" id="nativeSkin" />
           <span>
-            Replace YouTube's Subscribe, Like and Save buttons
-            <em class="sub">Hides the signed-out controls and uses LocalTube's, marked with a red edge.
-            Turn this off to use YouTube's real buttons again.</em>
+            <span data-i18n="opt_native_skin_label">Replace YouTube's Subscribe, Like and Save buttons</span>
+            <em class="sub" data-i18n="opt_native_skin_sub">Hides the signed-out controls and uses LocalTube's, marked with a red edge. Turn this off to use YouTube's real buttons again.</em>
           </span>
         </label>
         <label class="check">
           <input type="checkbox" id="recordHistory" />
           <span>
-            Keep a watch history
-            <em class="sub">Adds a video to LocalTube's History after ten seconds of playback. Stored
-            in this browser only; the last 500 are kept.</em>
+            <span data-i18n="opt_record_history_label">Keep a watch history</span>
+            <em class="sub" data-i18n="opt_record_history_sub">Adds a video to LocalTube's History after ten seconds of playback. Stored in this browser only; the last 500 are kept.</em>
           </span>
         </label>
         <label class="check">
           <input type="checkbox" id="notifyUploads" />
           <span>
-            Collect new uploads in the bell
-            <em class="sub">Adds a bell to YouTube's top bar listing new videos from channels you
-            follow. LocalTube has no background service, so it notices them while you have YouTube
-            open — not while the browser is elsewhere.</em>
+            <span data-i18n="opt_notify_uploads_label">Collect new uploads in the bell</span>
+            <em class="sub" data-i18n="opt_notify_uploads_sub">Adds a bell to YouTube's top bar listing new videos from channels you follow. LocalTube has no background service, so it notices them while you have YouTube open — not while the browser is elsewhere.</em>
           </span>
         </label>
         <label class="check">
           <input type="checkbox" id="hideShorts" />
           <span>
-            Hide Shorts
-            <em class="sub">Leaves Shorts out of the feed entirely. Off by default, which shelves
-            them in their own row above your videos instead of mixing them in.</em>
+            <span data-i18n="opt_hide_shorts_label">Hide Shorts</span>
+            <em class="sub" data-i18n="opt_hide_shorts_sub">Leaves Shorts out of the feed entirely. Off by default, which shelves them in their own row above your videos instead of mixing them in.</em>
           </span>
         </label>
         <label class="field">
-          <span>Refresh channels older than (minutes)</span>
+          <span data-i18n="opt_feed_ttl_label">Refresh channels older than (minutes)</span>
           <input type="number" id="feedTtlMinutes" min="1" max="1440" step="1" />
         </label>
       </section>
 
       <section class="card">
-        <h2>Backup</h2>
-        <p class="hint">
+        <h2 data-i18n="popup_backup_heading">Backup</h2>
+        <p class="hint" data-i18n="popup_backup_hint">
           Everything LocalTube knows lives in this browser. Export a file to move it to another
           browser or keep a copy.
         </p>
         <div class="cta-row">
-          <button class="btn btn-ghost" id="export">Export backup</button>
-          <button class="btn btn-ghost" id="import">Import backup</button>
+          <button class="btn btn-ghost" id="export" data-i18n="popup_export_backup">Export backup</button>
+          <button class="btn btn-ghost" id="import" data-i18n="popup_import_backup">Import backup</button>
         </div>
         <div class="cta-row">
-          <button class="btn btn-link" id="takeout">Import Google Takeout subscriptions.csv</button>
+          <button class="btn btn-link" id="takeout" data-i18n="popup_import_takeout">Import Google Takeout subscriptions.csv</button>
         </div>
-        <p class="hint">
-          Takeout: <em>takeout.google.com</em> → YouTube and YouTube Music → subscriptions.
+        <p class="hint" data-i18n="popup_takeout_hint">
+          Takeout: takeout.google.com → YouTube and YouTube Music → subscriptions.
         </p>
       </section>
 
       <p id="status" class="status" hidden></p>
 
-      <p class="footnote">
+      <p class="footnote" data-i18n="popup_footnote">
         Your follows, likes and playlists are stored in this browser only. Nothing is sent to
         YouTube or to us, and nothing affects your Google account or recommendations.
         LocalTube is not affiliated with YouTube or Google.

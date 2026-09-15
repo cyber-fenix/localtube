@@ -7,12 +7,15 @@ import pkg from '../package.json';
 // no scripting, no host beyond YouTube itself.
 export default defineManifest({
   manifest_version: 3,
+  // Localized via _locales/<lang>/messages.json — see extName/extDescription
+  // there. Chrome falls back to this locale when a viewer's browser language
+  // has no translation of its own.
+  default_locale: 'en',
   // Store search ranks the title heavily. Brand first, then the words people
   // actually search for. Max 75 chars.
-  name: 'LocalTube - Subscriptions & Playlists Without a Google Login',
+  name: '__MSG_extName__',
   // Shown under the title in search results and indexed. Max 132 chars.
-  description:
-    'Follow channels, build playlists, and get a subscriptions-only YouTube homepage - all stored locally, no account, no tracking.',
+  description: '__MSG_extDescription__',
   version: pkg.version,
   icons: {
     16: 'icons/icon16.png',
@@ -20,7 +23,7 @@ export default defineManifest({
     128: 'icons/icon128.png',
   },
   action: {
-    default_title: 'LocalTube',
+    default_title: '__MSG_extShortName__',
     default_popup: 'src/popup/index.html',
     default_icon: {
       16: 'icons/icon16.png',

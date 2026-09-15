@@ -9,6 +9,7 @@
 import { writesAllowed } from '@/content/account';
 import { flashToast } from '@/content/toast';
 import { addToPlaylist, createPlaylist, listPlaylists, systemPlaylistId } from '@/lib/playlists';
+import { t } from '@/lib/i18n';
 import { PATHS } from '@/ui/icons';
 import { openCardMenu, type MenuItem } from '@/ui/menu';
 import type { Video } from '@/types';
@@ -16,7 +17,7 @@ import type { Video } from '@/types';
 /** Save, reporting the duplicate case rather than silently doing nothing. */
 async function saveTo(playlistId: string, name: string, video: Video): Promise<void> {
   const added = await addToPlaylist(playlistId, video);
-  flashToast(added ? `Saved to ${name}` : `Already in ${name}`);
+  flashToast(t(added ? 'toast_saved_to' : 'toast_already_in', name));
 }
 
 /** The second level: which playlist to save into. */
@@ -32,10 +33,10 @@ async function openPlaylistPicker(button: HTMLElement, video: Video): Promise<vo
     }));
 
   items.push({
-    label: 'New playlist…',
+    label: t('action_new_playlist_ellipsis'),
     path: PATHS.save,
     onClick: async () => {
-      const name = prompt('Playlist name');
+      const name = prompt(t('prompt_playlist_name'));
       if (name === null) return;
       const playlist = await createPlaylist(name);
       await saveTo(playlist.id, playlist.name, video);
@@ -59,12 +60,12 @@ export function videoMenuItems(video: Video, button: HTMLElement, extra: MenuIte
     ...(writesAllowed()
       ? [
           {
-            label: 'Save to Watch later',
+            label: t('action_save_watch_later'),
             path: PATHS.watchLater,
-            onClick: async () => saveTo(await systemPlaylistId('watch-later'), 'Watch Later', video),
+            onClick: async () => saveTo(await systemPlaylistId('watch-later'), t('watch_later_name'), video),
           },
           {
-            label: 'Save to playlist',
+            label: t('action_save_to_playlist'),
             path: PATHS.bookmark,
             keepOpen: true,
             onClick: () => openPlaylistPicker(button, video),
@@ -72,13 +73,13 @@ export function videoMenuItems(video: Video, button: HTMLElement, extra: MenuIte
         ]
       : []),
     {
-      label: 'Share',
+      label: t('action_share'),
       path: PATHS.share,
       onClick: async () => {
         const url = `https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`;
         try {
           await navigator.clipboard.writeText(url);
-          flashToast('Link copied');
+          flashToast(t('toast_link_copied'));
         } catch {
           // Clipboard access can be refused; showing the URL still lets the
           // user copy it by hand.

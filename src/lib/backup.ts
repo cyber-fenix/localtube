@@ -6,6 +6,7 @@
 
 import { HISTORY_LIMIT, SCHEMA_VERSION, getData, setData } from '@/lib/store';
 import { prune as pruneProgress } from '@/lib/progress';
+import { t } from '@/lib/i18n';
 import type { HistoryEntry, LocalTubeData, Playlist, ProgressEntry, Video } from '@/types';
 
 export type ImportMode = 'merge' | 'replace';
@@ -52,18 +53,16 @@ function parse(json: string): LocalTubeData {
   try {
     parsed = JSON.parse(json);
   } catch {
-    throw new Error('That file is not valid JSON.');
+    throw new Error(t('error_invalid_json'));
   }
   const data = parsed as Partial<LocalTubeData>;
   if (typeof data?.version !== 'number' || !data.subscriptions || !data.playlists) {
-    throw new Error('That does not look like a LocalTube backup.');
+    throw new Error(t('error_not_a_backup'));
   }
   // Refuse a file from a newer version outright rather than applying half of it
   // and silently dropping fields this build does not understand.
   if (data.version > SCHEMA_VERSION) {
-    throw new Error(
-      `This backup was made by a newer version of LocalTube (format ${data.version}). Update the extension first.`,
-    );
+    throw new Error(t('error_backup_too_new', String(data.version)));
   }
   // Rebuild from known keys only. A file carries `exportedAt` and `app` for
   // humans, and a future build may add more; none of it belongs in the store.

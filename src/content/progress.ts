@@ -20,6 +20,7 @@
 import { adShowing, anchor, currentRoute, currentVideoId, waitForAnchor } from '@/content/youtube-dom';
 import { writesAllowed } from '@/content/account';
 import { actionToast } from '@/content/toast';
+import { t } from '@/lib/i18n';
 import {
   MIN_RESUME_SECONDS,
   clearProgress,
@@ -163,7 +164,7 @@ function adFinished(videoId: string, timeoutMs = 5 * 60_000): Promise<boolean> {
 
 /** Offer to undo a resume, whoever performed it. */
 function offerUndo(videoId: string, video: HTMLVideoElement, at: number): void {
-  actionToast(`Resumed at ${clock(at)}`, 'Play from start', () => {
+  actionToast(t('toast_resumed_at', clock(at)), t('action_play_from_start'), () => {
     video.currentTime = 0;
     void clearProgress(videoId).catch(ignore);
   });

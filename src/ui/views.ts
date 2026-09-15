@@ -27,6 +27,7 @@ import {
   watchHref, emptyState, formatViews, kebab, shortsShelf, timeAgo, videoGrid } from '@/ui/cards';
 import { PATHS, icon } from '@/ui/icons';
 import { clearShuffle, shuffled, writeShuffle } from '@/lib/shuffle';
+import { t } from '@/lib/i18n';
 import type { HistoryEntry, Playlist, ProgressEntry, Video } from '@/types';
 
 export type View =
@@ -117,8 +118,7 @@ const videoMatches = (video: Video, needle: string): boolean =>
 function localOnlyNote(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'lt-note';
-  note.textContent =
-    'LocalTube subscriptions, likes and playlists are stored in this browser only. They are not connected to a Google account and do not affect YouTube recommendations.';
+  note.textContent = t('local_only_note');
   return note;
 }
 
@@ -138,7 +138,7 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
   const refresh = document.createElement('button');
   refresh.type = 'button';
   refresh.className = 'lt-btn';
-  refresh.textContent = 'Refresh';
+  refresh.textContent = t('action_refresh');
 
   // Filters the videos already loaded — including the ones past the current
   // page, so a match further down the feed is findable without pressing Load
@@ -147,7 +147,7 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
   // Assigned once paint() exists, a few lines below; the field cannot be typed
   // into before then.
   let paintLatest = (): void => undefined;
-  const search = searchField('Filter this feed', (value) => {
+  const search = searchField(t('filter_feed_placeholder'), (value) => {
     query = value;
     paintLatest();
   });
@@ -182,18 +182,18 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
     latest = videos;
     latestStatus = feedStatus;
     if (feedStatus.done < feedStatus.refreshing) {
-      status.textContent = `Updating ${feedStatus.done}/${feedStatus.refreshing} channels…`;
+      status.textContent = t('feed_status_updating', [String(feedStatus.done), String(feedStatus.refreshing)]);
     } else if (feedStatus.failed.length > 0) {
       // "5 channels could not be loaded" is a dead end on its own: the reason
       // and the channel are both known, and both are already shown per row on
       // the subscriptions page. Say which, and how to get there.
       const count = feedStatus.failed.length;
-      status.textContent = `${count} channel${count === 1 ? '' : 's'} could not be loaded — `;
+      status.textContent = t('feed_status_failed_count', String(count));
       const link = document.createElement('button');
       link.type = 'button';
       link.className = 'lt-status-link';
-      link.textContent = 'see which';
-      link.title = 'Open the subscriptions list, which shows the reason for each one';
+      link.textContent = t('feed_status_see_which');
+      link.title = t('feed_status_see_which_title');
       link.addEventListener('click', () => go({ name: 'subscriptions' }));
       status.appendChild(link);
     } else {
@@ -211,17 +211,13 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
     if (rest.length === 0 && shorts.length === 0) {
       body.replaceChildren(
         needle
-          ? emptyState('No matches', `Nothing in your feed matches "${query.trim()}".`)
+          ? emptyState(t('empty_no_matches_title'), t('empty_feed_no_matches_body', query.trim()))
           : videos.length > 0 && hideShorts
-          ? emptyState(
-              'Only Shorts to show',
-              'Every video in your feed right now is a Short, and Shorts are hidden. Turn them back on in the extension popup to see them here.',
-            )
-          : emptyState(
-              'Your feed is empty',
-              'Follow a few channels with the LocalTube button on any channel or video page, or import your existing subscriptions from a Google Takeout file in the extension popup.',
-              { label: 'View subscriptions', onClick: () => go({ name: 'subscriptions' }) },
-            ),
+          ? emptyState(t('empty_only_shorts_title'), t('empty_only_shorts_body'))
+          : emptyState(t('empty_feed_title'), t('empty_feed_body'), {
+              label: t('action_view_subscriptions'),
+              onClick: () => go({ name: 'subscriptions' }),
+            }),
       );
       attach();
       return;
@@ -243,7 +239,7 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
       more.className = 'lt-btn';
       more.style.margin = '24px auto';
       more.style.display = 'block';
-      more.textContent = 'Load more';
+      more.textContent = t('action_load_more');
       more.addEventListener('click', () => {
         shown += PAGE_SIZE;
         paint(latest, feedStatus);
@@ -295,14 +291,17 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
 /** How the channel list is ordered. YouTube's chip says "Most relevant"; ours
  *  says what it actually does, because there is no relevance model here. */
 type ChannelSort = 'recent' | 'name';
-const SORT_LABEL: Record<ChannelSort, string> = {
-  recent: 'Recently followed',
-  name: 'Name (A–Z)',
-};
 let channelSort: ChannelSort = 'recent';
+const sortLabel = (sort: ChannelSort): string =>
+  sort === 'name' ? t('sort_name_az') : t('sort_recently_followed');
 
 /** YouTube's chevron, as it appears at the end of a chip. */
 const CHIP_CHEVRON = 'M18.707 8.793a1 1 0 00-1.414 0L12 14.086 6.707 8.793a1 1 0 10-1.414 1.414L12 16.914l6.707-6.707a1 1 0 000-1.414Z';
+
+/** "N videos" / "N recent videos", used both for the metadata line and the
+ *  description-line fallback below it. */
+const videoCountLabel = (count: number, deep: boolean): string =>
+  deep ? t('videos_count_all', String(count)) : t('videos_count_recent', String(count));
 
 export async function subscriptionsView(root: HTMLElement, rerender: () => void): Promise<void> {
   const [subscriptions, cache] = await Promise.all([listSubscriptions(), getFeedCache()]);
@@ -320,12 +319,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
   const rows: { channel: (typeof ordered)[number]; row: HTMLElement }[] = [];
 
   if (subscriptions.length === 0) {
-    body.appendChild(
-      emptyState(
-        'No channels yet',
-        'Open any YouTube channel or video and use the LocalTube follow button. To bring over an existing account, import a Google Takeout subscriptions.csv from the extension popup.',
-      ),
-    );
+    body.appendChild(emptyState(t('empty_no_channels_title'), t('empty_no_channels_body')));
   }
 
   // Laid out like YouTube's own /feed/channels, measured on a live page: a
@@ -371,7 +365,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
 
     const name = document.createElement('div');
     name.className = 'lt-channel-name';
-    name.textContent = isPlaceholderTitle(channel) ? 'Loading channel name…' : channel.title;
+    name.textContent = isPlaceholderTitle(channel) ? t('channel_name_loading') : channel.title;
 
     const meta = document.createElement('div');
     meta.className = 'lt-channel-meta';
@@ -381,12 +375,12 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
       meta.textContent = known;
     } else if (entry?.error) {
       meta.classList.add('lt-row-warn');
-      meta.textContent = `Feed unavailable (${entry.error}) — the channel may have been deleted`;
+      meta.textContent = t('feed_unavailable', entry.error);
     } else if (entry && entry.videos.length > 0) {
       const latest = entry.videos[0];
-      meta.textContent = `${entry.videos.length} ${entry.deep ? 'videos' : 'recent videos'} • latest ${timeAgo(latest.published)}`;
+      meta.textContent = `${videoCountLabel(entry.videos.length, !!entry.deep)} • ${t('latest_label', timeAgo(latest.published))}`;
     } else {
-      meta.textContent = entry ? 'No recent uploads' : 'Not loaded yet';
+      meta.textContent = entry ? t('no_recent_uploads') : t('not_loaded_yet');
     }
 
     // With the handle line above taking the metadata slot, the feed status
@@ -394,15 +388,19 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     const followedOn = document.createElement('div');
     followedOn.className = 'lt-channel-desc';
     const feedNote = entry?.error
-      ? `Feed unavailable (${entry.error}) — the channel may have been deleted`
+      ? t('feed_unavailable', entry.error)
       : entry && entry.videos.length > 0
-        ? `${entry.videos.length} ${entry.deep ? 'videos' : 'recent videos'} • latest ${timeAgo(entry.videos[0].published)}`
+        ? `${videoCountLabel(entry.videos.length, !!entry.deep)} • ${t('latest_label', timeAgo(entry.videos[0].published))}`
         : entry
-          ? 'No recent uploads'
-          : 'Not loaded yet';
+          ? t('no_recent_uploads')
+          : t('not_loaded_yet');
+    // The raw "ago" string is kept on the element so the handle-backfill patch
+    // below can rebuild this line without parsing back translated text.
+    const followedAgo = timeAgo(new Date(channel.addedAt).toISOString());
+    followedOn.dataset.followedAgo = followedAgo;
     followedOn.textContent = known
-      ? `${feedNote} • followed ${timeAgo(new Date(channel.addedAt).toISOString())}`
-      : `Followed ${timeAgo(new Date(channel.addedAt).toISOString())}`;
+      ? `${feedNote} • ${t('followed_lower_label', followedAgo)}`
+      : t('followed_label', followedAgo);
     if (known && entry?.error) followedOn.classList.add('lt-row-warn');
 
     info.append(name, meta, followedOn);
@@ -414,8 +412,8 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
       remove.type = 'button';
       remove.className = 'lt-channel-btn lt-accent';
       remove.setAttribute('aria-pressed', 'true');
-      remove.textContent = 'Subscribed';
-      remove.title = 'Following in LocalTube — click to unfollow';
+      remove.textContent = t('subscribed_label');
+      remove.title = t('subscribed_title');
       remove.addEventListener('click', async () => {
         await unsubscribe(channel.id);
         rerender();
@@ -429,27 +427,24 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
       deepen.type = 'button';
       deepen.className = 'lt-channel-btn lt-channel-btn-quiet';
       const deepened = entry?.deep === true;
-      deepen.textContent = deepened ? 'Load more older videos' : 'Load older videos';
-      deepen.title =
-        'Ask YouTube for this channel\u2019s earlier uploads and keep them in this browser. Uses a few MB of traffic.';
+      deepen.textContent = deepened ? t('load_more_older_videos') : t('load_older_videos');
+      deepen.title = t('load_older_videos_title');
       deepen.addEventListener('click', async () => {
         deepen.disabled = true;
         const restore = deepen.textContent;
-        deepen.textContent = 'Loading…';
+        deepen.textContent = t('loading_ellipsis');
         try {
           const result = await loadChannelHistory(channel.id, (loaded) => {
-            deepen.textContent = `Loading… ${loaded}`;
+            deepen.textContent = t('loading_count', String(loaded));
           });
-          if (result.rateLimited) flashToast('YouTube is rate-limiting LocalTube — try again later');
+          if (result.rateLimited) flashToast(t('toast_rate_limited'));
           else if (result.added > 0)
-            flashToast(
-              `Added ${result.added} older video${result.added === 1 ? '' : 's'} from ${channel.title}`,
-            );
-          else flashToast(result.complete ? 'Nothing older to load' : 'No new videos found');
+            flashToast(t('toast_added_older_videos', [String(result.added), channel.title]));
+          else flashToast(result.complete ? t('toast_nothing_older') : t('toast_no_new_videos'));
           rerender();
         } catch {
           deepen.textContent = restore;
-          flashToast('Could not load older videos');
+          flashToast(t('toast_could_not_load_older'));
         } finally {
           deepen.disabled = false;
         }
@@ -468,7 +463,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
 
   const heading = document.createElement('h1');
   heading.className = 'lt-page-title';
-  heading.textContent = 'All subscriptions';
+  heading.textContent = t('subscriptions_page_title');
 
   // YouTube's sort chip. Ours cycles rather than opening a menu — there are two
   // orders, and a menu for two options is a menu too many.
@@ -476,7 +471,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
   chip.type = 'button';
   chip.className = 'lt-chip';
   const chipLabel = document.createElement('span');
-  chipLabel.textContent = SORT_LABEL[channelSort];
+  chipLabel.textContent = sortLabel(channelSort);
   chip.append(chipLabel, icon(CHIP_CHEVRON, 24));
   chip.addEventListener('click', () => {
     channelSort = channelSort === 'recent' ? 'name' : 'recent';
@@ -486,9 +481,9 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
   // Filtering HIDES rows rather than rebuilding the list, so a "Load older
   // videos" run already in progress keeps its button, its progress text and
   // its disabled state instead of being replaced mid-fetch.
-  const noMatches = emptyState('No matches', 'No channel you follow matches that.');
+  const noMatches = emptyState(t('empty_no_matches_title'), t('empty_no_channel_match_body'));
   noMatches.hidden = true;
-  const filter = searchField('Filter your subscriptions', (value) => {
+  const filter = searchField(t('filter_subscriptions_placeholder'), (value) => {
     const needle = needleOf(value);
     let matched = 0;
     for (const { channel, row } of rows) {
@@ -536,8 +531,9 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     line.classList.remove('lt-row-warn');
     // The feed status the handle displaced moves down to the description line,
     // where it sits for every other channel that knows its handle.
-    const desc = row?.querySelector('.lt-channel-desc');
-    if (desc && status) desc.textContent = `${status} • ${(desc.textContent ?? '').replace(/^Followed/, 'followed')}`;
+    const desc = row?.querySelector<HTMLElement>('.lt-channel-desc');
+    const followedAgo = desc?.dataset.followedAgo;
+    if (desc && status && followedAgo) desc.textContent = `${status} • ${t('followed_lower_label', followedAgo)}`;
   }).catch(() => undefined);
 
   // Learn the avatar of anything that has none — Takeout carries none, and
@@ -582,7 +578,7 @@ export async function playlistsView(root: HTMLElement, rerender: () => void): Pr
 
   const heading = document.createElement('h1');
   heading.className = 'lt-page-title';
-  heading.textContent = 'Playlists';
+  heading.textContent = t('playlists_page_title');
 
   // The page's one action sits beside its title rather than in a bar of its own.
   const titleRow = document.createElement('div');
@@ -594,9 +590,9 @@ export async function playlistsView(root: HTMLElement, rerender: () => void): Pr
     const create = document.createElement('button');
     create.type = 'button';
     create.className = 'lt-btn lt-btn-primary';
-    create.textContent = 'New playlist';
+    create.textContent = t('action_new_playlist');
     create.addEventListener('click', async () => {
-      const name = prompt('Playlist name');
+      const name = prompt(t('prompt_playlist_name'));
       if (name === null) return;
       await createPlaylist(name);
       rerender();
@@ -653,9 +649,7 @@ function playlistCard(playlist: Playlist, rerender: () => void): HTMLElement {
   badge.appendChild(icon(PLAYLIST_BADGE, 12));
   const count = document.createElement('span');
   count.textContent =
-    playlist.videos.length === 0
-      ? 'No videos'
-      : `${playlist.videos.length} video${playlist.videos.length === 1 ? '' : 's'}`;
+    playlist.videos.length === 0 ? t('no_videos_label') : t('videos_count_label', String(playlist.videos.length));
   badge.appendChild(count);
   thumb.appendChild(badge);
   cover.appendChild(thumb);
@@ -674,12 +668,12 @@ function playlistCard(playlist: Playlist, rerender: () => void): HTMLElement {
   // the same fact: this list exists in this browser and nowhere else.
   const sub = document.createElement('div');
   sub.className = 'lt-pl-sub';
-  sub.textContent = 'Local • Playlist';
+  sub.textContent = t('local_playlist_label');
 
   const full = document.createElement('a');
   full.className = 'lt-pl-open';
   full.href = href;
-  full.textContent = 'View full playlist';
+  full.textContent = t('action_view_full_playlist');
   full.addEventListener('click', open);
 
   meta.append(title, sub, full);
@@ -694,9 +688,9 @@ function playlistCard(playlist: Playlist, rerender: () => void): HTMLElement {
     const rename = document.createElement('button');
     rename.type = 'button';
     rename.className = 'lt-card-action';
-    rename.textContent = 'Rename';
+    rename.textContent = t('action_rename');
     rename.addEventListener('click', async () => {
-      const name = prompt('Playlist name', playlist.name);
+      const name = prompt(t('prompt_playlist_name'), playlist.name);
       if (name === null) return;
       await renamePlaylist(playlist.id, name);
       rerender();
@@ -705,9 +699,9 @@ function playlistCard(playlist: Playlist, rerender: () => void): HTMLElement {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'lt-card-action';
-    remove.textContent = 'Delete';
+    remove.textContent = t('action_delete');
     remove.addEventListener('click', async () => {
-      if (!confirm(`Delete "${playlist.name}"? This cannot be undone.`)) return;
+      if (!confirm(t('confirm_delete_playlist', playlist.name))) return;
       await deletePlaylist(playlist.id);
       rerender();
     });
@@ -782,7 +776,7 @@ function playlistVideoRow(
   const menu = kebab(
     video,
     writesAllowed()
-      ? [{ label: 'Remove from playlist', path: PATHS.trash, onClick: () => void onRemove(video) }]
+      ? [{ label: t('action_remove_from_playlist'), path: PATHS.trash, onClick: () => void onRemove(video) }]
       : [],
   );
   menu.classList.add('lt-lockup-action');
@@ -800,8 +794,8 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
   const playlist = await getPlaylist(id);
   if (!playlist) {
     root.replaceChildren(
-      emptyState('Playlist not found', 'It may have been deleted from another tab.', {
-        label: 'Back to playlists',
+      emptyState(t('empty_playlist_not_found_title'), t('empty_playlist_not_found_body'), {
+        label: t('action_back_to_playlists'),
         onClick: () => go({ name: 'playlists' }),
       }),
     );
@@ -849,19 +843,19 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
   // A copied playlist says so. It is an ordinary local playlist from here on —
   // nothing syncs on its own — and the line is what keeps that from reading as
   // a live connection to the YouTube one.
-  owner.textContent = playlist.sourcePlaylistId ? 'LocalTube · copied from YouTube' : 'LocalTube';
+  owner.textContent = playlist.sourcePlaylistId ? t('playlist_owner_copied') : 'LocalTube';
 
   const stats = document.createElement('div');
   stats.className = 'lt-plpanel-stats';
   stats.textContent = [
-    `${playlist.videos.length} video${playlist.videos.length === 1 ? '' : 's'}`,
-    `Updated ${timeAgo(new Date(lastUpdated(playlist)).toISOString()) || 'just now'}`,
+    t('videos_count_label', String(playlist.videos.length)),
+    t('updated_label', timeAgo(new Date(lastUpdated(playlist)).toISOString()) || t('just_now')),
   ].join(' · ');
 
   const play = document.createElement('button');
   play.type = 'button';
   play.className = 'lt-plbtn lt-plbtn-filled';
-  play.append(icon(PATHS.play), document.createTextNode('Play all'));
+  play.append(icon(PATHS.play), document.createTextNode(t('action_play_all')));
   play.disabled = playlist.videos.length === 0;
   play.addEventListener('click', () => {
     clearShuffle(playlist.id);
@@ -873,7 +867,7 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
   const shuffle = document.createElement('button');
   shuffle.type = 'button';
   shuffle.className = 'lt-plbtn lt-plbtn-tonal';
-  shuffle.append(icon(PATHS.shuffle), document.createTextNode('Shuffle'));
+  shuffle.append(icon(PATHS.shuffle), document.createTextNode(t('action_shuffle')));
   shuffle.disabled = playlist.videos.length === 0;
   shuffle.addEventListener('click', () => {
     // A real shuffle, not a random starting point: the order is written for
@@ -899,9 +893,9 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
     const rename = document.createElement('button');
     rename.type = 'button';
     rename.className = 'lt-plpanel-link';
-    rename.textContent = 'Rename';
+    rename.textContent = t('action_rename');
     rename.addEventListener('click', async () => {
-      const next = prompt('Playlist name', playlist.name);
+      const next = prompt(t('prompt_playlist_name'), playlist.name);
       if (next === null) return;
       await renamePlaylist(playlist.id, next);
       rerender();
@@ -910,9 +904,9 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'lt-plpanel-link';
-    remove.textContent = 'Delete';
+    remove.textContent = t('action_delete');
     remove.addEventListener('click', async () => {
-      if (!confirm(`Delete "${playlist.name}"? This cannot be undone.`)) return;
+      if (!confirm(t('confirm_delete_playlist', playlist.name))) return;
       await deletePlaylist(playlist.id);
       go({ name: 'playlists' });
     });
@@ -928,23 +922,23 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
       const update = document.createElement('button');
       update.type = 'button';
       update.className = 'lt-plpanel-link';
-      update.textContent = 'Update from YouTube';
+      update.textContent = t('action_update_from_youtube');
       update.addEventListener('click', async () => {
         update.disabled = true;
-        showToast('Reading this playlist from YouTube…', { spinner: true });
+        showToast(t('toast_reading_playlist'), { spinner: true });
         try {
           const result = await savePlaylistFromYouTube(sourceId, (loaded) => {
-            showToast(`Reading this playlist from YouTube… ${loaded} videos`, { spinner: true });
+            showToast(t('toast_reading_playlist_progress', String(loaded)), { spinner: true });
           });
           flashToast(
             result.added > 0
-              ? `Added ${result.added} new video${result.added === 1 ? '' : 's'}`
-              : 'Already up to date',
+              ? t('toast_added_new_videos', String(result.added))
+              : t('toast_already_up_to_date'),
           );
           rerender();
         } catch (error) {
           flashToast(
-            error instanceof PlaylistUnavailable ? error.message : 'Could not read this playlist',
+            error instanceof PlaylistUnavailable ? error.message : t('toast_could_not_read_playlist'),
             4000,
             { error: true },
           );
@@ -973,16 +967,14 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
 
   const paintRows = (query: string): void => {
     if (playlist.videos.length === 0) {
-      list.replaceChildren(
-        emptyState('Nothing saved yet', 'Use the Save button under any video to add it here.'),
-      );
+      list.replaceChildren(emptyState(t('empty_playlist_nothing_saved_title'), t('empty_playlist_nothing_saved_body')));
       return;
     }
     const needle = needleOf(query);
     const shown = playlist.videos.filter((video) => videoMatches(video, needle));
     if (shown.length === 0) {
       list.replaceChildren(
-        emptyState('No matches', `Nothing in this playlist matches "${query.trim()}".`),
+        emptyState(t('empty_no_matches_title'), t('empty_playlist_no_matches_body', query.trim())),
       );
       return;
     }
@@ -999,7 +991,7 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
   if (playlist.videos.length > 8) {
     const bar = document.createElement('div');
     bar.className = 'lt-plsearch';
-    bar.appendChild(searchField('Filter this playlist', paintRows));
+    bar.appendChild(searchField(t('filter_playlist_placeholder'), paintRows));
     column.appendChild(bar);
   }
   column.appendChild(list);
@@ -1017,8 +1009,8 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
 function dayLabel(watchedAt: number): string {
   const midnight = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((midnight(new Date()) - midnight(new Date(watchedAt))) / 86_400_000);
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
+  if (days <= 0) return t('day_today');
+  if (days === 1) return t('day_yesterday');
   return new Date(watchedAt).toLocaleDateString(undefined, {
     month: 'long',
     day: 'numeric',
@@ -1061,7 +1053,7 @@ function historyRow(
   const menu = kebab(
     entry,
     writesAllowed()
-      ? [{ label: 'Remove from history', path: PATHS.trash, onClick: () => void onRemove(entry) }]
+      ? [{ label: t('action_remove_from_history'), path: PATHS.trash, onClick: () => void onRemove(entry) }]
       : [],
   );
   menu.classList.add('lt-histrow-remove');
@@ -1079,7 +1071,7 @@ function historyRow(
   byline.textContent = [
     entry.channelTitle,
     formatViews(entry.views),
-    `watched ${timeAgo(new Date(entry.watchedAt).toISOString())}`,
+    t('watched_label', timeAgo(new Date(entry.watchedAt).toISOString())),
   ]
     .filter(Boolean)
     .join(' • ');
@@ -1113,7 +1105,7 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
 
   const title = document.createElement('h1');
   title.className = 'lt-page-title';
-  title.textContent = 'Watch history';
+  title.textContent = t('history_page_title');
 
   /* ------------------------------------------------------------- the rail */
 
@@ -1122,8 +1114,8 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
   search.appendChild(icon(PATHS.search));
   const field = document.createElement('input');
   field.type = 'search';
-  field.placeholder = 'Search watch history';
-  field.setAttribute('aria-label', 'Search watch history');
+  field.placeholder = t('search_history_placeholder');
+  field.setAttribute('aria-label', t('search_history_placeholder'));
   search.appendChild(field);
 
   const rail = document.createElement('aside');
@@ -1133,15 +1125,15 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
   // Clearing and pausing both change what gets written — read-only mode shows
   // the history but neither of these controls.
   if (writesAllowed()) {
-    const clear = railAction('Clear all watch history', PATHS.trash, async () => {
-      if (!confirm('Clear your entire LocalTube watch history? This cannot be undone.')) return;
+    const clear = railAction(t('action_clear_history'), PATHS.trash, async () => {
+      if (!confirm(t('confirm_clear_history'))) return;
       await clearHistory();
       rerender();
     });
     if (history.length === 0) (clear as HTMLButtonElement).disabled = true;
 
     const pause = railAction(
-      enabled ? 'Pause watch history' : 'Resume watch history',
+      enabled ? t('action_pause_history') : t('action_resume_history'),
       enabled ? PATHS.pause : PATHS.play,
       async () => {
         await setHistoryEnabled(!enabled);
@@ -1153,9 +1145,7 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
 
   const note = document.createElement('p');
   note.className = 'lt-rail-note';
-  note.textContent = enabled
-    ? `Added after ten seconds of playback. The last ${HISTORY_LIMIT} are kept, in this browser only — YouTube is never told what you watched.`
-    : 'Recording is paused. Nothing new is being added.';
+  note.textContent = enabled ? t('history_note_enabled', String(HISTORY_LIMIT)) : t('history_note_paused');
   rail.appendChild(note);
 
   /* ------------------------------------------------------------- the list */
@@ -1181,12 +1171,10 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
     if (shown.length === 0) {
       list.replaceChildren(
         needle
-          ? emptyState('No matches', `Nothing in your history matches "${query.trim()}".`)
+          ? emptyState(t('empty_no_matches_title'), t('empty_history_no_matches_body', query.trim()))
           : emptyState(
-              enabled ? 'Nothing watched yet' : 'History is paused',
-              enabled
-                ? 'Videos you watch on YouTube will appear here, newest first. Nothing leaves this browser.'
-                : 'Resume recording to start collecting watched videos again.',
+              enabled ? t('empty_history_title') : t('empty_history_paused_title'),
+              enabled ? t('empty_history_body') : t('empty_history_paused_body'),
             ),
       );
       return;
