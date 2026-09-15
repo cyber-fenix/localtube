@@ -20,6 +20,7 @@
 import { anchor, generation, waitForAnchor } from '@/content/youtube-dom';
 import { writesAllowed } from '@/content/account';
 import { listSubscriptions } from '@/lib/subscriptions';
+import { getData, systemPlaylist } from '@/lib/store';
 import { go, viewHash, type View } from '@/ui/views';
 
 const ENTRY_CLASS = 'localtube-guide-entry';
@@ -467,6 +468,9 @@ export async function mountNavRail(): Promise<void> {
       onClick: () => openView(view),
     };
     after = addEntry(subs, after, spec, 'link');
+    // What this row counts. Read back by renderGuideCounts, which is the only
+    // thing that ever writes a number here.
+    after.dataset.ltView = view.name;
     specs.push([after, spec]);
   }
 
@@ -476,6 +480,79 @@ export async function mountNavRail(): Promise<void> {
     () => specs.forEach(([el, spec]) => el.isConnected && paintEntry(el, spec)),
     150,
   );
+
+  void renderGuideCounts();
+}
+
+/* -------------------------------------------------------------------- counts */
+
+/**
+ * How many things each LocalTube row leads to.
+ *
+ * Deliberately NOT part of `mountNavRail`'s build, and deliberately not part of
+ * the channel signature either. Both exist to stop the sidebar being REBUILT,
+ * and a count changes far more often than the rows do — every save to Watch
+ * later, every video watched. Folding it into either one would mean a clone
+ * remove/add storm on ordinary use (measured once at ~3,500 cycles in ten
+ * seconds), and leaving it out of both would mean a number that goes stale the
+ * moment you save anything.
+ *
+ * So the number is written on its own, into a node that already exists, by
+ * setting a Text node's `data` — a characterData mutation, which the
+ * self-healing observer in content/index.ts does not watch (it asks for
+ * childList only). `textContent =` would replace the child and wake it on
+ * every write.
+ */
+export async function renderGuideCounts(): Promise<void> {
+  const entries = Array.from(
+    document.querySelectorAll<HTMLElement>(`.${ENTRY_CLASS}[data-lt-view]`),
+  );
+  if (entries.length === 0) return;
+
+  const data = await getData();
+  const counts: Record<string, number> = {
+    history: data.history.length,
+    // User playlists only: Watch later and Liked have rows of their own, and
+    // counting them here would count them twice.
+    playlists: Object.values(data.playlists).filter((playlist) => !playlist.system).length,
+    'watch-later': systemPlaylist(data, 'watch-later').videos.length,
+    liked: systemPlaylist(data, 'liked').videos.length,
+  };
+
+  for (const entry of entries) setCount(entry, counts[entry.dataset.ltView ?? ''] ?? 0);
+}
+
+/**
+ * Write one row's count into YouTube's own count slot.
+ *
+ * `span.guide-entry-count` is part of every guide entry — YouTube uses it for
+ * the new-video count on Subscriptions when signed in — so the clone already
+ * carries one, in the right place, at the right size. It is Polymer-managed
+ * and `display: none` until Polymer fills it, so it gets the same treatment as
+ * the label and the icon: replaced once with a plain span, then left alone.
+ *
+ * Zero shows nothing. An empty Watch later saying "0" is noise, and YouTube's
+ * own count is absent rather than zero in the same situation.
+ */
+function setCount(entry: HTMLElement, count: number): void {
+  const text = count > 0 ? String(count) : '';
+  let slot = entry.querySelector<HTMLElement>('span.lt-guide-count');
+  if (!slot) {
+    const original = entry.querySelector('span.guide-entry-count');
+    if (!original) return;
+    slot = document.createElement('span');
+    slot.className = 'guide-entry-count style-scope ytd-guide-entry-renderer lt-guide-count';
+    slot.appendChild(document.createTextNode(''));
+    original.replaceWith(slot);
+  }
+  const node = slot.firstChild;
+  // .data, not .textContent: replacing the child is a childList mutation, and
+  // the guide observer would wake on every count change.
+  if (node instanceof Text) {
+    if (node.data !== text) node.data = text;
+  } else {
+    slot.replaceChildren(document.createTextNode(text));
+  }
 }
 
 /**

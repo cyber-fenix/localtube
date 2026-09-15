@@ -402,7 +402,7 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
   padding-inline: 48px;
 }
 
-.lt-chips { margin-bottom: 24px; }
+.lt-chips { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
 
 .lt-chip {
   display: inline-flex;
@@ -418,6 +418,67 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 }
 .lt-chip:hover { background: var(--lt-surface-hover); }
 .lt-chip svg { width: 18px; height: 18px; margin-left: 4px; fill: currentColor; }
+
+/* The filter box that sits in a view's own controls row (feed, subscriptions,
+   a playlist). It takes the chip's metrics — 32px on a 10% fill at an 8px
+   radius — because it stands beside chips and buttons in that row, and because
+   YouTube's own filter controls at this level are chips too. History's search
+   is deliberately NOT this: it lives in a rail, where YouTube draws a 56px
+   underlined field, and that one is measured from YouTube's own page.
+
+   It filters what is already on screen, so it holds no state of its own and
+   never re-reads storage. */
+.lt-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-width: 0;
+  max-width: 280px;
+  flex: 1 1 200px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--lt-surface);
+}
+.lt-search svg { width: 18px; height: 18px; flex: none; fill: var(--lt-text-dim); }
+.lt-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--lt-text);
+  font: 400 14px/20px Roboto, Arial, sans-serif;
+}
+.lt-search input::placeholder { color: var(--lt-text-dim); }
+.lt-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* The count on a LocalTube sidebar row.
+
+   It reuses YouTube's own `span.guide-entry-count` slot — every guide entry
+   carries one, which YouTube fills with the new-video count on Subscriptions
+   when signed in — so the position and size are YouTube's, measured live
+   (2026-09-11): 14px/20px, sitting at the flex row's content right edge,
+   immediately after the title.
+
+   One deliberate difference: YouTube draws its count in the label's own
+   colour, because it is a notification. Ours is a list size, so it is dim —
+   supplementary information should not compete with the label it belongs to.
+
+   `display` needs !important: YouTube's own rule hides this slot until Polymer
+   fills it, and nothing here goes through Polymer. */
+.lt-guide-count {
+  display: inline-block !important;
+  margin-left: auto;
+  font: 400 14px/20px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+
+/* Filtering the subscriptions list hides rows rather than rebuilding them, so
+   a "Load older videos" run in progress keeps its button and its progress.
+   The rule needs to beat `.lt-channel { display: flex }`, which the UA's own
+   [hidden] rule does not. */
+#localtube-root [hidden] { display: none !important; }
 
 .lt-channels { display: flex; flex-direction: column; }
 
@@ -758,6 +819,13 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 
 /* ------------------------------------------------------------- lockup rows */
 
+/* The list column: the rows, with the filter box above them when the playlist
+   is long enough to have one. It carries the flex sizing the row list used to
+   carry itself. */
+.lt-plcolumn { flex: 1 1 auto; min-width: 0; }
+/* Aligned with the list's own 32px inset, so the box starts where the rows do. */
+.lt-plsearch { padding: 8px 32px 0; }
+
 .lt-lockups {
   flex: 1 1 auto;
   min-width: 0;
@@ -811,7 +879,7 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 @media (max-width: 1000px) {
   .lt-pldetail { flex-direction: column; }
   .lt-plpanel { position: static; width: 100%; max-width: 360px; }
-  .lt-lockups { padding-inline: 0; }
+  .lt-lockups, .lt-plsearch { padding-inline: 0; }
 }
 
 /* --------------------------------------------------------------- history
@@ -1078,6 +1146,26 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 }
 
 .lt-native-row { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Save-to-LocalTube on a YouTube playlist page.
+
+   40px at a 20px radius on a 10% fill with a 500 14px/40px label and a 24px
+   icon — YouTube's own playlist-header buttons, measured live (2026-09-11) on
+   the Save / Share pair beside Play all. Taller than the 36px pills elsewhere
+   in this file because that panel's buttons are, and 8px of clearance above
+   because it lands under a row YouTube ends with 8px of its own.
+
+   It fills the panel's 312px column rather than sitting inline: YouTube's row
+   is nowrap and already exactly that wide, so a fifth button in it would
+   overflow the panel. */
+#localtube-save-playlist {
+  height: 40px;
+  border-radius: 20px;
+  margin-top: 8px;
+  font: 500 14px/40px Roboto, Arial, sans-serif;
+  gap: 8px;
+}
+#localtube-save-playlist svg { width: 24px; height: 24px; }
 
 /* ------------------------------------------------------- masthead identity */
 
@@ -1453,3 +1541,167 @@ yt-reel-channel-bar-view-model .lt-follow-anywhere {
 }
 .lt-channel-btn-quiet:hover { background: var(--lt-surface-hover); color: var(--lt-text); }
 .lt-channel-btn-quiet:disabled { opacity: .6; cursor: default; }
+
+/* An inline "see which" beside a feed status: a link in a status line, not a
+   control — no pill, no border, so the row still reads as one sentence. */
+.lt-status-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--lt-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------- notifications bell
+   Measured against YouTube's own notification panel on a live page
+   (2026-09-11, signed out — its bell opens the same empty panel): the menu is
+   480 wide at a 12px radius on a 0 4px 32px rgba(0,0,0,.1) shadow, docked at
+   the masthead's bottom edge and right-aligned to the bell, with a 49px header
+   holding a 16px/22px title 16px in, over a 1px 20% rule. The empty state's
+   bell is YouTube's own path at 120px. Row metrics are ours: their signed-out
+   panel has no rows to measure. */
+#localtube-bell {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--lt-text);
+  cursor: pointer;
+}
+#localtube-bell:hover { background: var(--lt-surface-hover); }
+#localtube-bell svg { width: 24px; height: 24px; fill: currentColor; }
+
+.lt-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: #cc0000;
+  color: #fff;
+  font: 500 11px/16px Roboto, Arial, sans-serif;
+  text-align: center;
+}
+
+#localtube-notifications {
+  position: fixed;
+  z-index: 2400;
+  width: 480px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  background: var(--lt-bg);
+  color: var(--lt-text);
+  border-radius: 12px;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.lt-notif-head {
+  flex: none;
+  height: 49px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--lt-border);
+}
+.lt-notif-title { flex: 1 1 auto; font: 400 16px/22px Roboto, Arial, sans-serif; }
+.lt-notif-gear {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--lt-text);
+  cursor: pointer;
+}
+.lt-notif-gear:hover { background: var(--lt-surface-hover); }
+.lt-notif-gear svg { width: 24px; height: 24px; fill: currentColor; }
+
+.lt-notif-list { overflow-y: auto; overscroll-behavior: contain; }
+
+.lt-notif {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.lt-notif:hover { background: var(--lt-surface-hover); }
+.lt-notif-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+.lt-notif-unread .lt-notif-dot { background: #3ea6ff; }
+.lt-notif-text { flex: 1 1 auto; min-width: 0; }
+.lt-notif-line {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font: 400 14px/20px Roboto, Arial, sans-serif;
+}
+.lt-notif-when {
+  margin-top: 4px;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+.lt-notif-thumb {
+  flex: none;
+  width: 106px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--lt-surface);
+}
+
+.lt-notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 64px 40px;
+}
+.lt-notif-empty-icon {
+  width: 120px;
+  height: 120px;
+  fill: var(--lt-text-dim);
+  margin-bottom: 14px;
+}
+.lt-notif-empty-head { font: 500 16px/22px Roboto, Arial, sans-serif; color: var(--lt-text-dim); }
+.lt-notif-empty-body {
+  font: 400 14px/20px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+  max-width: 300px;
+}
+
+@media (max-width: 520px) {
+  #localtube-notifications { width: calc(100vw - 16px); }
+  .lt-notif-thumb { width: 80px; height: 45px; }
+  .lt-notif-empty { padding: 40px 24px; }
+  .lt-notif-empty-icon { width: 88px; height: 88px; }
+}

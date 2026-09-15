@@ -51,6 +51,7 @@ async function refresh(): Promise<void> {
   $<HTMLInputElement>('nativeSkin').checked = data.settings.nativeSkin;
   $<HTMLInputElement>('recordHistory').checked = data.settings.recordHistory;
   $<HTMLInputElement>('hideShorts').checked = data.settings.hideShorts;
+  $<HTMLInputElement>('notifyUploads').checked = data.settings.notifyUploads;
   $<HTMLInputElement>('feedTtlMinutes').value = String(data.settings.feedTtlMinutes);
 }
 
@@ -74,6 +75,11 @@ $<HTMLInputElement>('nativeSkin').addEventListener('change', async (event) => {
 $<HTMLInputElement>('recordHistory').addEventListener('change', async (event) => {
   await setSettings({ recordHistory: (event.target as HTMLInputElement).checked });
   setStatus('Saved. Existing history is kept; clear it from the History page.');
+});
+
+$<HTMLInputElement>('notifyUploads').addEventListener('change', async (event) => {
+  await setSettings({ notifyUploads: (event.target as HTMLInputElement).checked });
+  setStatus('Saved. Reload any open YouTube tab to see the change.');
 });
 
 $<HTMLInputElement>('hideShorts').addEventListener('change', async (event) => {

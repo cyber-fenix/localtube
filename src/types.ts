@@ -58,6 +58,17 @@ export interface Playlist {
   system?: SystemPlaylist;
   videos: Video[];
   createdAt: number;
+  /**
+   * The YouTube playlist this one was copied from, when it was.
+   *
+   * Only a provenance note: the playlist itself is an ordinary local one, with
+   * no sync loop behind it. It exists so pressing Save on the same YouTube
+   * playlist twice refreshes the copy instead of making a second one, and so
+   * the playlist page can offer to refresh it.
+   */
+  sourcePlaylistId?: string;
+  /** Epoch ms of the last read from YouTube. */
+  sourceSyncedAt?: number;
 }
 
 /** A watched video, newest first. Local only — never sent anywhere. */
@@ -95,6 +106,29 @@ export interface Settings {
   resumePlayback: boolean;
   /** Leave Shorts out of the feed entirely, instead of shelving them apart. */
   hideShorts: boolean;
+  /** Collect new uploads from followed channels in the masthead bell. */
+  notifyUploads: boolean;
+}
+
+/**
+ * A new upload from a channel you follow, waiting in the bell.
+ *
+ * A notification is a record of the moment LocalTube first SAW the video, not
+ * of the upload itself — `seenAt` is what orders the list, `published` is what
+ * the row displays. The two differ whenever a browser was closed for a week.
+ */
+export interface NotificationEntry {
+  videoId: string;
+  title: string;
+  channelId: string;
+  channelTitle: string;
+  thumbnail: string;
+  /** ISO 8601, from the channel feed. */
+  published: string;
+  /** Epoch ms of the refresh that first found it. */
+  seenAt: number;
+  /** Cleared when the panel is opened, which is what the badge counts. */
+  read?: boolean;
 }
 
 /** Everything a backup contains. Bump `version` only with a migration. */
@@ -106,6 +140,9 @@ export interface LocalTubeData {
   history: HistoryEntry[];
   /** Where you stopped, by video id. Capped at PROGRESS_LIMIT. */
   progress: Record<string, ProgressEntry>;
+  /** New uploads waiting in the bell, newest first, capped at
+   *  NOTIFICATION_LIMIT. */
+  notifications: NotificationEntry[];
   settings: Settings;
 }
 

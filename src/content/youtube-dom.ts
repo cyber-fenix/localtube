@@ -16,6 +16,24 @@ function pick(selectors: string[], root: ParentNode = document): HTMLElement | n
   return null;
 }
 
+/**
+ * Like `pick`, but skips matches that are not actually laid out.
+ *
+ * YouTube ships more than one renderer for the same page and leaves the unused
+ * ones in the DOM at zero size — a playlist page carries a whole second
+ * `yt-page-header-renderer` inside `ytd-tabbed-page-header` that nothing ever
+ * paints. Mounting into one of those puts a control in the document with a 0x0
+ * box, which is indistinguishable from a mount that never ran, and no amount
+ * of selector precision protects against the NEXT layout YouTube tries.
+ * Asking whether the node has a box does.
+ */
+function pickVisible(selectors: string[], root: ParentNode = document): HTMLElement | null {
+  for (const sel of selectors)
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>(sel)))
+      if (el.getBoundingClientRect().width > 0) return el;
+  return null;
+}
+
 /** Anchors, in priority order. Earlier entries are the current markup; later
  *  ones are older layouts kept as a safety net. */
 export const ANCHORS = {
@@ -40,6 +58,41 @@ export const ANCHORS = {
   ],
   /** Watch page: the channel owner block, next to YouTube's Subscribe. */
   watchOwner: ['ytd-watch-metadata #owner', '#owner', 'ytd-video-owner-renderer'],
+  /**
+   * Playlist page: the immersive panel's info column, under Play all / Share.
+   *
+   * The panel is the same `yt-page-header-renderer` the channel page uses —
+   * measured live (2026-09-11), the two differ only by the `page-subtype` on
+   * the enclosing `ytd-browse` ("playlist" vs "channels").
+   *
+   * NOT the action row itself, and that is measured rather than preferred:
+   * YouTube's row is `flex-wrap: nowrap` and already exactly as wide as the
+   * 312px panel column it sits in (four buttons, 8px apart, ending flush), so
+   * a fifth would overflow the panel. `.ytPageHeaderViewModelHeadlineInfo` is
+   * the flex COLUMN that row lives in, so appending there puts LocalTube's
+   * button on its own line beneath — which is also the honest place for it,
+   * since it does something different from YouTube's Save.
+   *
+   * The `:has()` is load-bearing: the live panel has THREE of these info
+   * columns (hero + title + metadata; description preview + actions; an empty
+   * one), and only the one holding the actions puts our button UNDER YouTube's
+   * buttons rather than above them.
+   *
+   * A playlist page also carries a whole second, zero-sized
+   * `yt-page-header-renderer` inside `ytd-tabbed-page-header` — the
+   * channel-style shell, unused here — and mounting into it puts the button in
+   * the DOM with a 0x0 box, which looks exactly like a mount that never ran.
+   * The `>` in the first selector excludes it, but this anchor is resolved
+   * with `visibleAnchor` rather than `anchor` precisely so a layout that moves
+   * the live header somewhere else still works: the later, looser selectors
+   * are allowed to match the decoy, and the box check throws it out.
+   */
+  playlistActions: [
+    'ytd-browse[page-subtype="playlist"] > yt-page-header-renderer .ytPageHeaderViewModelHeadlineInfo:has(yt-flexible-actions-view-model)',
+    'ytd-browse[page-subtype="playlist"] .ytPageHeaderViewModelHeadlineInfo:has(yt-flexible-actions-view-model)',
+    'ytd-browse[page-subtype="playlist"] yt-flexible-actions-view-model',
+    'ytd-playlist-header-renderer .metadata-action-bar',
+  ],
   /** Channel page: the header area holding Subscribe. */
   channelHeader: [
     'yt-page-header-renderer yt-flexible-actions-view-model',
@@ -94,8 +147,18 @@ export const HIDE_SELECTORS: string[] = [
   // Hide the row's OWN children only. The row itself is our mount point (see
   // ANCHORS.channelHeader) — hiding it hid our button along with YouTube's,
   // which is why the channel page lost its Subscribe entirely.
-  'yt-page-header-renderer yt-flexible-actions-view-model > *:not([id^="localtube-"])',
-  '#page-header yt-flexible-actions-view-model > *:not([id^="localtube-"])',
+  //
+  // Scoped to the CHANNEL page, and that scope is a bug fix. A playlist page
+  // renders the same `yt-page-header-renderer`, so the unscoped rules hid its
+  // Play all, Save and Share as well — verified live (2026-09-11) by applying
+  // these very rules to a real /playlist page and measuring the action row at
+  // `display: none`. Those three are not dead signed-out controls: YouTube's
+  // Save really does save a playlist locally while signed out (it flipped to
+  // "Remove from library" on the same page), so there is nothing to stand in
+  // for and nothing to hide. `page-subtype` is the discriminator — measured
+  // "channels" on a channel page, "playlist" on a playlist page.
+  'ytd-browse[page-subtype="channels"] yt-page-header-renderer yt-flexible-actions-view-model > *:not([id^="localtube-"])',
+  'ytd-browse[page-subtype="channels"] #page-header yt-flexible-actions-view-model > *:not([id^="localtube-"])',
   // Watch page — like / dislike (current view-model markup, then older)
   'ytd-watch-metadata segmented-like-dislike-button-view-model',
   'ytd-watch-metadata like-button-view-model',
@@ -134,6 +197,12 @@ export const HIDE_SELECTORS: string[] = [
   // flexible-actions rule above.
   '#sponsor-button',
   'ytd-watch-metadata #sponsor-button',
+  // Masthead — YouTube's own bell. It renders signed out too, and opens an
+  // empty "Your notifications live here" panel with no sign-in link
+  // (verified live, 2026-09-11) — so it is a dead control, and LocalTube's
+  // bell takes its slot. Hide the renderer, never #buttons around it: that
+  // row is where our bell and avatar mount.
+  'ytd-masthead ytd-notification-topbar-button-renderer',
   // Masthead — Sign in. Matched by the link's destination rather than by
   // position, so the overflow and other masthead buttons are left alone.
   'ytd-masthead ytd-button-renderer:has(a[href*="accounts.google.com"])',
@@ -162,9 +231,14 @@ export function anchor(name: AnchorName): HTMLElement | null {
   return pick(ANCHORS[name]);
 }
 
+/** The first anchor match that is actually on screen. See `pickVisible`. */
+export function visibleAnchor(name: AnchorName): HTMLElement | null {
+  return pickVisible(ANCHORS[name]);
+}
+
 /* -------------------------------------------------------------------- routes */
 
-export type Route = 'home' | 'subscriptions' | 'watch' | 'channel' | 'other';
+export type Route = 'home' | 'subscriptions' | 'watch' | 'channel' | 'playlist' | 'other';
 
 /** Routes where LocalTube renders its own views in place of YouTube's. */
 export const isFeedRoute = (route: Route): route is 'home' | 'subscriptions' =>
@@ -175,6 +249,7 @@ export function currentRoute(): Route {
   if (p === '/' || p === '') return 'home';
   if (p === '/feed/subscriptions') return 'subscriptions';
   if (p === '/watch') return 'watch';
+  if (p === '/playlist') return 'playlist';
   if (p.startsWith('/@') || p.startsWith('/channel/') || p.startsWith('/c/') || p.startsWith('/user/'))
     return 'channel';
   return 'other';
@@ -184,6 +259,21 @@ export function currentRoute(): Route {
 export function currentVideoId(): string | null {
   if (currentRoute() !== 'watch') return null;
   return new URLSearchParams(location.search).get('v');
+}
+
+/**
+ * The YouTube playlist id of the /playlist page we are on, if any.
+ *
+ * LocalTube's own queue travels in the hash (`#localtube-queue=`), so `list=`
+ * here is always YouTube's — but the mix ids YouTube generates for radios and
+ * autoplay ("RD…", "UL…") are not saveable playlists, and asking for one
+ * returns nothing useful.
+ */
+export function currentPlaylistId(): string | null {
+  if (currentRoute() !== 'playlist') return null;
+  const list = new URLSearchParams(location.search).get('list');
+  if (!list || /^(RD|UL|TL)/.test(list)) return null;
+  return list;
 }
 
 /**
@@ -268,13 +358,19 @@ export function stopNavigationWatch(): void {
  * Wait for an anchor to appear. YouTube renders its shell before its content,
  * so a mount attempted the instant navigation finishes usually finds nothing.
  */
-export function waitForAnchor(name: AnchorName, timeoutMs = 10_000): Promise<HTMLElement | null> {
-  const found = anchor(name);
+export function waitForAnchor(
+  name: AnchorName,
+  timeoutMs = 10_000,
+  /** Wait for a match that is laid out, not merely present. */
+  visible = false,
+): Promise<HTMLElement | null> {
+  const find = (): HTMLElement | null => (visible ? visibleAnchor(name) : anchor(name));
+  const found = find();
   if (found) return Promise.resolve(found);
 
   return new Promise((resolve) => {
     const observer = new MutationObserver(() => {
-      const el = anchor(name);
+      const el = find();
       if (!el) return;
       observer.disconnect();
       window.clearTimeout(timer);
@@ -294,9 +390,15 @@ export function waitForAnchor(name: AnchorName, timeoutMs = 10_000): Promise<HTM
  *  page console instead of guessed at. */
 export function diag(): Record<string, unknown> {
   const anchors: Record<string, string | null> = {};
+  // Anchors that match something with no box at all. YouTube leaves unused
+  // renderers in the DOM at zero size, so "matched" and "usable" are different
+  // questions — and a control mounted into a zero-size node looks exactly like
+  // a mount that never ran. This is the line that tells those two apart.
+  const hidden: string[] = [];
   for (const name of Object.keys(ANCHORS) as AnchorName[]) {
     const matched = ANCHORS[name].find((sel) => document.querySelector(sel));
     anchors[name] = matched ?? null;
+    if (matched && !visibleAnchor(name)) hidden.push(name);
   }
   // Which hide-selectors currently match something. A selector reported false
   // on a page where its target is visible is one that needs updating.
@@ -312,6 +414,7 @@ export function diag(): Record<string, unknown> {
   return {
     route: currentRoute(),
     videoId: currentVideoId(),
+    playlistId: currentPlaylistId(),
     hash: location.hash,
     nativeSkin: document.documentElement.dataset.localtubeNative ?? null,
     // 'yes' / 'no' / null while the page has not said yet. Null on a loaded
@@ -319,6 +422,7 @@ export function diag(): Record<string, unknown> {
     signedIn: document.documentElement.dataset.localtubeSignedin ?? null,
     adShowing: adShowing(),
     anchors,
+    anchorsWithNoBox: hidden,
     hiding,
     channelFromMainWorld: document.documentElement.dataset.localtubeChannel ?? null,
   };

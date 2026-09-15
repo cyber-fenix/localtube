@@ -9,6 +9,7 @@
 // no reason to attach the user's YouTube cookies to it.
 
 import { getData, getFeedCache, putFeedCache, updateData } from '@/lib/store';
+import { noteNewUploads } from '@/lib/notifications';
 import type { FeedCache, Video } from '@/types';
 
 const NS = {
@@ -268,20 +269,29 @@ export async function loadFeed(
   // The pass promise is created and pendingPass is registered in the same
   // synchronous run, so no other loadFeed caller can slip in between and miss
   // it (callers only interleave at await points).
+  // Uploads this pass discovers, for the bell. Collected rather than written
+  // per channel: one write at the end of the pass, like every other writer
+  // here.
+  const discovered: Video[] = [];
+
   const pass = (async (): Promise<void> => {
     await pool(stale, async (channelId) => {
       try {
+        const previous = cache[channelId]?.videos ?? [];
+        const incoming = await fetchChannelFeed(channelId);
+        // Only a channel LocalTube has already read counts as having "new"
+        // videos. A channel being loaded for the first time — the whole of a
+        // Takeout import — would otherwise announce its entire back catalogue.
+        if (previous.length > 0) {
+          const seen = new Set(previous.map((video) => video.id));
+          for (const video of incoming) if (!seen.has(video.id)) discovered.push(video);
+        }
         // Merged, not replaced: everything harvested from the channel page would
         // otherwise be thrown away by the next routine refresh.
         cache[channelId] = {
           ...cache[channelId],
           fetchedAt: Date.now(),
-          videos: mergeVideos(
-            cache[channelId]?.videos ?? [],
-            await fetchChannelFeed(channelId),
-            true,
-            videoLimitFor(cache[channelId]),
-          ),
+          videos: mergeVideos(previous, incoming, true, videoLimitFor(cache[channelId])),
           error: undefined,
         };
       } catch (error) {
@@ -300,6 +310,7 @@ export async function loadFeed(
 
     await putFeedCache(cache, channelIds);
     await backfillTitles(cache, channelIds);
+    await noteNewUploads(discovered);
     // Final paint AFTER the cache is persisted: joined callers re-render from
     // the same data a later route rerun would read back from storage.
     maybeRender(true);

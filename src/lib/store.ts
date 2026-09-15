@@ -60,7 +60,16 @@ export const DEFAULT_SETTINGS: Settings = {
   recordHistory: true,
   resumePlayback: true,
   hideShorts: false,
+  notifyUploads: true,
 };
+
+/**
+ * How many new-upload notifications the bell keeps.
+ *
+ * Small on purpose: this is a "what did I miss" list, not an archive — the
+ * feed itself is the archive, and every notification points into it.
+ */
+export const NOTIFICATION_LIMIT = 50;
 
 /** How many watched videos History keeps. Old entries fall off the end rather
  *  than growing chrome.storage.local without bound. */
@@ -88,6 +97,7 @@ function emptyData(): LocalTubeData {
     playlists: {},
     history: [],
     progress: {},
+    notifications: [],
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -120,6 +130,8 @@ export async function getData(): Promise<LocalTubeData> {
     // Same reason as `history` above: a store written before resume existed has
     // no such key, and `undefined` would win over the default in the spread.
     progress: saved?.progress ?? {},
+    // Same reason again: a store written before the bell existed has no key.
+    notifications: saved?.notifications ?? [],
     settings: { ...DEFAULT_SETTINGS, ...(saved?.settings ?? {}) },
   };
   if (ensureSystemPlaylists(data)) await storage(() => chrome.storage.local.set({ [DATA_KEY]: data }));

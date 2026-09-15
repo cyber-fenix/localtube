@@ -2,10 +2,12 @@
 // mounts inside YouTube's home page; nothing here knows about YouTube's DOM.
 
 import { writesAllowed } from '@/content/account';
-import { flashToast } from '@/content/toast';
+import { flashToast, showToast } from '@/content/toast';
 import { loadFeed, mergeCache, type FeedStatus } from '@/lib/feed';
 import { backfillVideoDetails } from '@/lib/video-details';
 import { loadChannelHistory } from '@/lib/deep-history';
+import { PlaylistUnavailable, savePlaylistFromYouTube } from '@/lib/import-playlist';
+import { innertubeAvailable } from '@/lib/innertube';
 import { deletePlaylist, getPlaylist, listPlaylists, removeFromPlaylist, renamePlaylist, createPlaylist } from '@/lib/playlists';
 import { listProgress, watchedFraction } from '@/lib/progress';
 import { clearHistory, historyEnabled, listHistory, removeFromHistory, setHistoryEnabled } from '@/lib/history';
@@ -83,6 +85,35 @@ export function go(view: View): void {
 /** Fired when LocalTube changes its own view; src/content/home.ts listens. */
 export const VIEW_CHANGED = 'localtube:view';
 
+/**
+ * A filter box for a view's own controls row.
+ *
+ * It filters the list ALREADY on screen, on every keystroke, and never touches
+ * storage — the same rule History's search follows, and for the same reason: a
+ * round-trip per character would be visible, and what is loaded is what the
+ * user is looking at. Nothing here is remembered between renders either; a
+ * filter is a thing you are doing, not a setting.
+ */
+function searchField(placeholder: string, onQuery: (query: string) => void): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'lt-search';
+  box.appendChild(icon(PATHS.search));
+  const field = document.createElement('input');
+  field.type = 'search';
+  field.placeholder = placeholder;
+  field.setAttribute('aria-label', placeholder);
+  field.addEventListener('input', () => onQuery(field.value));
+  box.appendChild(field);
+  return box;
+}
+
+/** Lower-cased needle, or '' when the query is only whitespace. */
+const needleOf = (query: string): string => query.trim().toLowerCase();
+
+/** Does this video match? Title and channel, which is what someone types. */
+const videoMatches = (video: Video, needle: string): boolean =>
+  !needle || `${video.title} ${video.channelTitle}`.toLowerCase().includes(needle);
+
 function localOnlyNote(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'lt-note';
@@ -109,13 +140,25 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
   refresh.className = 'lt-btn';
   refresh.textContent = 'Refresh';
 
+  // Filters the videos already loaded — including the ones past the current
+  // page, so a match further down the feed is findable without pressing Load
+  // more first.
+  let query = '';
+  // Assigned once paint() exists, a few lines below; the field cannot be typed
+  // into before then.
+  let paintLatest = (): void => undefined;
+  const search = searchField('Filter this feed', (value) => {
+    query = value;
+    paintLatest();
+  });
+
   // Built detached and attached in a single swap on the first paint. Attaching
   // an empty body first and filling it after the await left the page visibly
   // blank for three storage round-trips on every switch to this tab.
   const body = document.createElement('div');
   const bar = document.createElement('div');
   bar.className = 'lt-actions';
-  bar.append(status, refresh);
+  bar.append(search, status, refresh);
   const note = localOnlyNote();
   let attached = false;
   const attach = (): void => {
@@ -138,21 +181,38 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
     if (!token()) return;
     latest = videos;
     latestStatus = feedStatus;
-    status.textContent =
-      feedStatus.done < feedStatus.refreshing
-        ? `Updating ${feedStatus.done}/${feedStatus.refreshing} channels…`
-        : feedStatus.failed.length > 0
-          ? `${feedStatus.failed.length} channel${feedStatus.failed.length === 1 ? '' : 's'} could not be loaded`
-          : '';
+    if (feedStatus.done < feedStatus.refreshing) {
+      status.textContent = `Updating ${feedStatus.done}/${feedStatus.refreshing} channels…`;
+    } else if (feedStatus.failed.length > 0) {
+      // "5 channels could not be loaded" is a dead end on its own: the reason
+      // and the channel are both known, and both are already shown per row on
+      // the subscriptions page. Say which, and how to get there.
+      const count = feedStatus.failed.length;
+      status.textContent = `${count} channel${count === 1 ? '' : 's'} could not be loaded — `;
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'lt-status-link';
+      link.textContent = 'see which';
+      link.title = 'Open the subscriptions list, which shows the reason for each one';
+      link.addEventListener('click', () => go({ name: 'subscriptions' }));
+      status.appendChild(link);
+    } else {
+      status.textContent = '';
+    }
+
+    const needle = needleOf(query);
+    const matching = needle ? videos.filter((video) => videoMatches(video, needle)) : videos;
 
     // Anything not yet classified is treated as an ordinary video, so a
     // classification that has not arrived can never make a video vanish.
-    const shorts = hideShorts ? [] : videos.filter((video) => video.isShort === true);
-    const rest = videos.filter((video) => video.isShort !== true);
+    const shorts = hideShorts ? [] : matching.filter((video) => video.isShort === true);
+    const rest = matching.filter((video) => video.isShort !== true);
 
     if (rest.length === 0 && shorts.length === 0) {
       body.replaceChildren(
-        videos.length > 0 && hideShorts
+        needle
+          ? emptyState('No matches', `Nothing in your feed matches "${query.trim()}".`)
+          : videos.length > 0 && hideShorts
           ? emptyState(
               'Only Shorts to show',
               'Every video in your feed right now is a Short, and Shorts are hidden. Turn them back on in the extension popup to see them here.',
@@ -192,6 +252,10 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
     }
     attach();
   };
+
+  // Re-paint what is already loaded, e.g. when the filter changes. Declared
+  // after paint so it always uses the current one.
+  paintLatest = (): void => paint(latest, latestStatus);
 
   refresh.addEventListener('click', () => {
     refresh.disabled = true;
@@ -251,6 +315,9 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
 
   const body = document.createElement('div');
   body.className = 'lt-channels';
+
+  /** Every row, kept so the filter can hide rather than rebuild. */
+  const rows: { channel: (typeof ordered)[number]; row: HTMLElement }[] = [];
 
   if (subscriptions.length === 0) {
     body.appendChild(
@@ -395,6 +462,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     } else {
       row.append(avatarLink, info);
     }
+    rows.push({ channel, row });
     body.appendChild(row);
   }
 
@@ -415,13 +483,30 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     rerender();
   });
 
+  // Filtering HIDES rows rather than rebuilding the list, so a "Load older
+  // videos" run already in progress keeps its button, its progress text and
+  // its disabled state instead of being replaced mid-fetch.
+  const noMatches = emptyState('No matches', 'No channel you follow matches that.');
+  noMatches.hidden = true;
+  const filter = searchField('Filter your subscriptions', (value) => {
+    const needle = needleOf(value);
+    let matched = 0;
+    for (const { channel, row } of rows) {
+      const hit =
+        !needle || `${channel.title} ${channel.handle ?? ''}`.toLowerCase().includes(needle);
+      row.hidden = !hit;
+      if (hit) matched++;
+    }
+    noMatches.hidden = matched > 0;
+  });
+
   const chips = document.createElement('div');
   chips.className = 'lt-chips';
-  if (subscriptions.length > 1) chips.appendChild(chip);
+  if (subscriptions.length > 1) chips.append(filter, chip);
 
   const page = document.createElement('div');
   page.className = 'lt-subs-page';
-  page.append(heading, chips, body, localOnlyNote());
+  page.append(heading, chips, body, noMatches, localOnlyNote());
 
   root.replaceChildren(page);
 
@@ -761,7 +846,10 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
 
   const owner = document.createElement('div');
   owner.className = 'lt-plpanel-owner';
-  owner.textContent = 'LocalTube';
+  // A copied playlist says so. It is an ordinary local playlist from here on —
+  // nothing syncs on its own — and the line is what keeps that from reading as
+  // a live connection to the YouTube one.
+  owner.textContent = playlist.sourcePlaylistId ? 'LocalTube · copied from YouTube' : 'LocalTube';
 
   const stats = document.createElement('div');
   stats.className = 'lt-plpanel-stats';
@@ -830,6 +918,43 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
     });
 
     manage.append(rename, remove);
+
+    // Only for a playlist copied from YouTube, and only when the page can
+    // still reach Innertube: re-reading it here saves going back to the
+    // YouTube playlist to press Save again. The same one-shot read as the
+    // button there — there is no sync loop behind either of them.
+    if (playlist.sourcePlaylistId && innertubeAvailable()) {
+      const sourceId = playlist.sourcePlaylistId;
+      const update = document.createElement('button');
+      update.type = 'button';
+      update.className = 'lt-plpanel-link';
+      update.textContent = 'Update from YouTube';
+      update.addEventListener('click', async () => {
+        update.disabled = true;
+        showToast('Reading this playlist from YouTube…', { spinner: true });
+        try {
+          const result = await savePlaylistFromYouTube(sourceId, (loaded) => {
+            showToast(`Reading this playlist from YouTube… ${loaded} videos`, { spinner: true });
+          });
+          flashToast(
+            result.added > 0
+              ? `Added ${result.added} new video${result.added === 1 ? '' : 's'}`
+              : 'Already up to date',
+          );
+          rerender();
+        } catch (error) {
+          flashToast(
+            error instanceof PlaylistUnavailable ? error.message : 'Could not read this playlist',
+            4000,
+            { error: true },
+          );
+        } finally {
+          update.disabled = false;
+        }
+      });
+      manage.appendChild(update);
+    }
+
     inner.appendChild(manage);
   }
 
@@ -844,19 +969,44 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
 
   const list = document.createElement('div');
   list.className = 'lt-lockups';
-  if (playlist.videos.length === 0) {
-    list.appendChild(
-      emptyState('Nothing saved yet', 'Use the Save button under any video to add it here.'),
+  const watched = progressFor(await listProgress());
+
+  const paintRows = (query: string): void => {
+    if (playlist.videos.length === 0) {
+      list.replaceChildren(
+        emptyState('Nothing saved yet', 'Use the Save button under any video to add it here.'),
+      );
+      return;
+    }
+    const needle = needleOf(query);
+    const shown = playlist.videos.filter((video) => videoMatches(video, needle));
+    if (shown.length === 0) {
+      list.replaceChildren(
+        emptyState('No matches', `Nothing in this playlist matches "${query.trim()}".`),
+      );
+      return;
+    }
+    list.replaceChildren(
+      ...shown.map((video) => playlistVideoRow(video, removeVideo, watched(video.id))),
     );
-  } else {
-    const watched = progressFor(await listProgress());
-    for (const video of playlist.videos)
-      list.appendChild(playlistVideoRow(video, removeVideo, watched(video.id)));
+  };
+  paintRows('');
+
+  const column = document.createElement('div');
+  column.className = 'lt-plcolumn';
+  // Only worth a filter box once the list is long enough to need one; a
+  // playlist of four is faster to read than to type into.
+  if (playlist.videos.length > 8) {
+    const bar = document.createElement('div');
+    bar.className = 'lt-plsearch';
+    bar.appendChild(searchField('Filter this playlist', paintRows));
+    column.appendChild(bar);
   }
+  column.appendChild(list);
 
   const layout = document.createElement('div');
   layout.className = 'lt-pldetail';
-  layout.append(panel, list);
+  layout.append(panel, column);
 
   root.replaceChildren(layout, localOnlyNote());
 }

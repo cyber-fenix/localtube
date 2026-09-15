@@ -381,3 +381,213 @@ export async function channelVideosViaInnertube(
   }
   return page;
 }
+
+/** One page of a YouTube playlist's contents, as YouTube's own page renders it. */
+export interface InnertubePlaylistPage {
+  /** The playlist's own name. Only the first page carries it. */
+  title?: string;
+  videos: {
+    id: string;
+    title?: string;
+    /** Channel id from the byline's own browse endpoint, never a regex. */
+    channelId?: string;
+    channelTitle?: string;
+    channelAvatar?: string;
+    /** Duration badge text, "4:13". */
+    durationText?: string;
+    /** "1.7M views". */
+    viewsText?: string;
+    /** "1 day ago". */
+    ageText?: string;
+    thumbnail?: string;
+    isShort: boolean;
+  }[];
+  /** Token for the next page, absent at the end of the playlist. */
+  continuation?: string;
+}
+
+/**
+ * One page of an existing YouTube playlist — 100 videos, plus a token for the
+ * next page.
+ *
+ * `browseId` is the playlist id with a `VL` prefix, which is how YouTube's own
+ * playlist page asks for it. No `params`, and no referrer trickery: the
+ * competitor needs `declarativeNetRequestWithHostAccess` to spoof an embed for
+ * the same data, which is a permission this extension will not ask for.
+ *
+ * Shapes verified live (2026-09-11, signed out, WEB client):
+ *   title:   metadata.playlistMetadataRenderer.title
+ *   items:   contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer
+ *            .content.sectionListRenderer.contents[0].itemSectionRenderer
+ *            .contents — 100 `lockupViewModel` and a trailing
+ *            `continuationItemViewModel`
+ *   paging:  that token fed back as `continuation` returns the next 100 under
+ *            onResponseReceivedActions[0].appendContinuationItemsAction
+ *            .continuationItems
+ *
+ * Two shape details are load-bearing and were each measured rather than
+ * assumed. The continuation is a `continuationItemViewModel` — NOT the
+ * `continuationItemRenderer` the channel grid uses — and on a SHORT playlist
+ * it arrives as a sibling section (`sectionListRenderer.contents[1]`) instead
+ * of as the item list's tail, where it is a dead trigger that returns an empty
+ * response. Both positions are read, and a token that yields nothing simply
+ * ends the walk.
+ *
+ * It is NOT cheap: ~4.7 MB for a 100-video page (measured live on "Uploads
+ * from Fireship"), the same order as the channel grid per video. Nothing calls
+ * this on a schedule — see lib/import-playlist.ts.
+ *
+ * **`hl: 'en'` is deliberate**, for the same reason as the channel grid: the
+ * ages and view counts here are rendered text that lib/parse.ts reads in
+ * English only. None of it is ever displayed, so the language is ours to pick.
+ */
+export async function playlistViaInnertube(
+  playlistId: string,
+  continuation?: string,
+): Promise<InnertubePlaylistPage | null> {
+  const client = readClient();
+  if (!client) return null;
+
+  const response = await fetch(`https://www.youtube.com/youtubei/v1/browse?key=${client.key}`, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      context: {
+        client: {
+          clientName: client.clientName,
+          clientVersion: client.clientVersion,
+          hl: 'en',
+          gl: client.gl,
+          visitorData: client.visitorData,
+        },
+      },
+      ...(continuation ? { continuation } : { browseId: `VL${playlistId}` }),
+    }),
+  });
+  if (response.status === 429) throw new InnertubeRateLimited();
+  if (!response.ok) return null;
+
+  const json: unknown = await response.json();
+  if (!isRecord(json)) return null;
+  const get = (node: unknown, ...path: string[]): unknown =>
+    path.reduce((n: unknown, key) => (isRecord(n) ? n[key] : undefined), node);
+
+  // A deleted or private playlist answers 200 with an alert instead of
+  // contents, so "no items" and "no such playlist" are told apart here.
+  const alert = get(json, 'alerts', '0', 'alertRenderer', 'type');
+  if (alert === 'ERROR') return null;
+
+  const sections = get(
+    json,
+    'contents', 'twoColumnBrowseResultsRenderer', 'tabs', '0', 'tabRenderer',
+    'content', 'sectionListRenderer', 'contents',
+  );
+
+  let items: unknown = get(json, 'onResponseReceivedActions', '0', 'appendContinuationItemsAction', 'continuationItems');
+  const page: InnertubePlaylistPage = { videos: [] };
+
+  if (!Array.isArray(items)) {
+    items = get(sections, '0', 'itemSectionRenderer', 'contents');
+    const title = get(json, 'metadata', 'playlistMetadataRenderer', 'title');
+    if (typeof title === 'string' && title.trim()) page.title = title.trim();
+    // The short-playlist case: the continuation sits beside the item list
+    // rather than inside it.
+    if (Array.isArray(sections))
+      for (const section of sections.slice(1)) {
+        const token = continuationToken(section);
+        if (token) page.continuation = token;
+      }
+  }
+  // A parsed response with no item list is the END of the walk, not a failure:
+  // a playlist shorter than one page still hands out a continuation token, and
+  // following it returns exactly this — 2 KB of responseContext and nothing
+  // else (measured on a 16-video playlist, 2026-09-11). Returning an empty
+  // page rather than null is what lets the caller tell "that is everything"
+  // from "that request failed", and so stops a complete import reporting
+  // itself as truncated.
+  if (!Array.isArray(items)) return page;
+
+  for (const item of items) {
+    const token = continuationToken(item);
+    if (token) {
+      page.continuation = token;
+      continue;
+    }
+    const lockup = get(item, 'lockupViewModel');
+    const id = get(lockup, 'contentId');
+    if (typeof id !== 'string' || !id) continue;
+
+    const meta = get(lockup, 'metadata', 'lockupMetadataViewModel');
+    const title = get(meta, 'title', 'content');
+
+    // The byline. The channel is taken from its own browse endpoint — the one
+    // place a lockup states the channel id outright — and never by fishing a
+    // `UC…` out of the blob, where trackingParams yields false positives.
+    let channelId: string | undefined;
+    let channelTitle: string | undefined;
+    let viewsText: string | undefined;
+    let ageText: string | undefined;
+    const rows = get(meta, 'metadata', 'contentMetadataViewModel', 'metadataRows');
+    if (Array.isArray(rows))
+      for (const row of rows) {
+        const parts = isRecord(row) ? row.metadataParts : undefined;
+        if (!Array.isArray(parts)) continue;
+        const browseId = get(
+          parts, '0', 'text', 'commandRuns', '0', 'onTap', 'innertubeCommand', 'browseEndpoint', 'browseId',
+        );
+        if (typeof browseId === 'string' && browseId.startsWith('UC')) {
+          channelId = browseId;
+          const name = get(parts, '0', 'text', 'content');
+          if (typeof name === 'string') channelTitle = name;
+          continue;
+        }
+        // The stats row: views first, age second, the order YouTube writes
+        // them in on both the playlist page and the channel grid.
+        const first = get(parts, '0', 'text', 'content');
+        const second = get(parts, '1', 'text', 'content');
+        if (typeof first === 'string') viewsText = first;
+        if (typeof second === 'string') ageText = second;
+      }
+
+    const thumbnailVm = get(lockup, 'contentImage', 'thumbnailViewModel');
+    let durationText: string | undefined;
+    const overlays = get(thumbnailVm, 'overlays');
+    if (Array.isArray(overlays))
+      for (const overlay of overlays) {
+        const badge = get(
+          overlay, 'thumbnailBottomOverlayViewModel', 'badges', '0', 'thumbnailBadgeViewModel', 'text',
+        );
+        if (typeof badge === 'string') {
+          durationText = badge;
+          break;
+        }
+      }
+
+    page.videos.push({
+      id,
+      title: typeof title === 'string' ? title : undefined,
+      channelId,
+      channelTitle,
+      channelAvatar: lastUrl(
+        get(meta, 'image', 'decoratedAvatarViewModel', 'avatar', 'avatarViewModel', 'image', 'sources'),
+      ),
+      durationText,
+      viewsText,
+      ageText,
+      thumbnail: lastUrl(get(thumbnailVm, 'image', 'sources')),
+      isShort: get(lockup, 'contentType') === 'LOCKUP_CONTENT_TYPE_SHORTS',
+    });
+  }
+  return page;
+}
+
+/** The playlist page's continuation token, wherever it is hiding. */
+function continuationToken(node: unknown): string | undefined {
+  const get = (n: unknown, ...path: string[]): unknown =>
+    path.reduce((acc: unknown, key) => (isRecord(acc) ? acc[key] : undefined), n);
+  const token =
+    get(node, 'continuationItemViewModel', 'continuationCommand', 'innertubeCommand', 'continuationCommand', 'token') ??
+    get(node, 'continuationItemRenderer', 'continuationEndpoint', 'continuationCommand', 'token');
+  return typeof token === 'string' && token ? token : undefined;
+}

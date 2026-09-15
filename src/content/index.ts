@@ -19,12 +19,20 @@ import { watchCardChannelHarvest } from '@/content/avatar-harvest';
 import { syncAccountBar } from '@/content/account-bar';
 import { renderHome, unmountHome } from '@/content/home';
 import { AVATAR_ID, closeMenu, mountMasthead } from '@/content/masthead';
-import { CHANNELS_ID, SECTION_ID, mountNavRail, renderGuideChannels } from '@/content/nav-rail';
+import { BELL_ID, closeNotifications, mountBell } from '@/content/notifications';
+import {
+  CHANNELS_ID,
+  SECTION_ID,
+  mountNavRail,
+  renderGuideChannels,
+  renderGuideCounts,
+} from '@/content/nav-rail';
 import { syncNativeSkin } from '@/content/native-skin';
 import { harvestChannelVideos, watchForHarvest } from '@/content/harvest';
 import { mountHistory } from '@/content/history';
 import { mountProgress } from '@/content/progress';
 import { mountQueue } from '@/content/queue';
+import { SAVE_PLAYLIST_ID, mountSavePlaylist } from '@/content/save-playlist';
 import { mountSubscribeButton } from '@/content/subscribe-button';
 import {
   closeChannelsPopover,
@@ -55,8 +63,14 @@ async function route(): Promise<void> {
   await Promise.all([
     mountNavRail(),
     renderGuideChannels(),
+    // Cheap and write-free: one storage read, then a text node per row only
+    // where the number actually changed. It runs on every route — which is
+    // also every storage change — so the counts cannot go stale.
+    renderGuideCounts(),
     mountMasthead(),
+    mountBell(),
     mountSubscribeButton(),
+    mountSavePlaylist(),
     mountSubscribeEverywhere(),
     mountVideoActions(),
     mountQueue(),
@@ -124,6 +138,7 @@ function closeOverlays(): void {
   closePopover();
   closeMenu();
   closeCardMenu();
+  closeNotifications();
 }
 
 /**
@@ -148,6 +163,14 @@ function watchForMissingControls(): void {
       void mountVideoActions().catch(() => undefined);
     if (nativeSkinOn() && !document.getElementById(AVATAR_ID))
       void mountMasthead().catch(() => undefined);
+    // Same treatment as the avatar: YouTube re-renders the masthead's button
+    // row and takes the bell with it.
+    if (nativeSkinOn() && !document.getElementById(BELL_ID))
+      void mountBell().catch(() => undefined);
+    // The playlist header is re-rendered the same way the watch actions are,
+    // and it is the anchor our Save button is appended to.
+    if (currentRoute() === 'playlist' && !document.getElementById(SAVE_PLAYLIST_ID))
+      void mountSavePlaylist().catch(() => undefined);
     // The guide is re-rendered on its own too, taking both LocalTube groups
     // with it.
     if (anchor('guide') && !document.getElementById(CHANNELS_ID))
