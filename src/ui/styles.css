@@ -1,0 +1,536 @@
+/* Injected into youtube.com.
+
+   LocalTube owns its palette rather than reading YouTube's `--yt-spec-*`
+   custom properties: those do not resolve where our injected controls live, so
+   every declaration fell back to its literal — and light-theme literals on a
+   dark page render black on black.
+
+   src/content/theme.ts decides the theme and stamps data-localtube-theme on
+   <html>; `html[dark]` is listed alongside it so the colours are right for the
+   frame before that script runs. Tokens are defined on :root because the
+   injected controls (.lt-inject, .lt-popover, #localtube-queue, .lt-guide-link)
+   live outside #localtube-root and must see them too. */
+
+:root {
+  --lt-text: #0f0f0f;
+  --lt-text-dim: #606060;
+  --lt-bg: #fff;
+  --lt-surface: rgba(0, 0, 0, 0.05);
+  --lt-surface-hover: rgba(0, 0, 0, 0.1);
+  --lt-border: rgba(0, 0, 0, 0.12);
+  --lt-menu-bg: #fff;
+  --lt-accent: #065fd4;
+  --lt-on-accent: #fff;
+  /* The "pressed"/selected pill: YouTube inverts against the page. */
+  --lt-invert-bg: #0f0f0f;
+  --lt-invert-text: #fff;
+  --lt-danger: #c00;
+}
+
+html[data-localtube-theme='dark'],
+html[dark] {
+  --lt-text: #f1f1f1;
+  --lt-text-dim: #aaa;
+  --lt-bg: #0f0f0f;
+  --lt-surface: rgba(255, 255, 255, 0.1);
+  --lt-surface-hover: rgba(255, 255, 255, 0.2);
+  --lt-border: rgba(255, 255, 255, 0.2);
+  --lt-menu-bg: #282828;
+  /* YouTube's dark accent is a light blue with dark text on top of it. */
+  --lt-accent: #3ea6ff;
+  --lt-on-accent: #0f0f0f;
+  --lt-invert-bg: #f1f1f1;
+  --lt-invert-text: #0f0f0f;
+  --lt-danger: #ff8a80;
+}
+
+/* An explicit light stamp always wins, even under html[dark]. */
+html[data-localtube-theme='light'] {
+  --lt-text: #0f0f0f;
+  --lt-text-dim: #606060;
+  --lt-bg: #fff;
+  --lt-surface: rgba(0, 0, 0, 0.05);
+  --lt-surface-hover: rgba(0, 0, 0, 0.1);
+  --lt-border: rgba(0, 0, 0, 0.12);
+  --lt-menu-bg: #fff;
+  --lt-accent: #065fd4;
+  --lt-on-accent: #fff;
+  --lt-invert-bg: #0f0f0f;
+  --lt-invert-text: #fff;
+  --lt-danger: #c00;
+}
+
+#localtube-root {
+  /* ytd-browse is a centring flex row, so as its only visible child this would
+     otherwise shrink to its content width and sit centred with the grid
+     collapsed to one column. Grow to fill it instead. */
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+
+  padding: 16px 24px 64px;
+  color: var(--lt-text);
+  font-family: Roboto, Arial, sans-serif;
+}
+
+/* When a LocalTube view is showing, hide YouTube's own browse content but keep
+   it in the DOM — toggling LocalTube off must restore the page untouched. */
+ytd-browse.localtube-active > *:not(#localtube-root) {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------- chrome */
+
+.lt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.lt-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font: 500 14px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: var(--lt-surface);
+  cursor: pointer;
+}
+.lt-tab:hover { background: var(--lt-surface-hover); }
+.lt-tab[aria-selected='true'] {
+  color: var(--lt-invert-text);
+  background: var(--lt-invert-bg);
+}
+
+.lt-spacer { flex: 1; }
+
+.lt-status {
+  font-size: 12px;
+  color: var(--lt-text-dim);
+}
+
+.lt-btn {
+  border: 1px solid var(--lt-border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font: 500 14px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: transparent;
+  cursor: pointer;
+}
+.lt-btn:hover { background: var(--lt-surface); }
+.lt-btn-primary {
+  border-color: transparent;
+  color: var(--lt-on-accent);
+  background: var(--lt-accent);
+}
+.lt-btn-primary:hover { background: var(--lt-accent); filter: brightness(1.08); }
+.lt-btn:disabled { opacity: .5; cursor: default; }
+
+/* ---------------------------------------------------------------- cards */
+
+.lt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px 16px;
+}
+
+.lt-card { position: relative; }
+
+.lt-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.lt-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--lt-surface);
+}
+.lt-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lt-meta { padding: 10px 2px 0; }
+
+.lt-card-title {
+  font: 500 15px/1.4 Roboto, Arial, sans-serif;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lt-card-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--lt-text-dim);
+}
+
+.lt-card-action {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: 500 12px/1 Roboto, Arial, sans-serif;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.75);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.lt-card:hover .lt-card-action,
+.lt-card-action:focus-visible { opacity: 1; }
+
+/* ------------------------------------------------------ lists and states */
+
+.lt-list { display: flex; flex-direction: column; gap: 4px; max-width: 720px; }
+
+.lt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.lt-row:hover { background: var(--lt-surface); }
+.lt-row img { width: 36px; height: 36px; border-radius: 50%; }
+.lt-row-main { flex: 1; min-width: 0; }
+.lt-row-title { font-size: 14px; font-weight: 500; }
+.lt-row-sub { font-size: 12px; color: var(--lt-text-dim); }
+.lt-row a { color: inherit; text-decoration: none; }
+.lt-row-warn { color: var(--lt-danger); }
+
+.lt-empty {
+  max-width: 520px;
+  margin: 64px auto;
+  text-align: center;
+}
+.lt-empty h2 { font-size: 20px; margin: 0 0 8px; }
+.lt-empty p { font-size: 14px; color: var(--lt-text-dim); margin: 0 0 20px; line-height: 1.6; }
+
+.lt-note {
+  margin-top: 24px;
+  font-size: 12px;
+  color: var(--lt-text-dim);
+}
+
+/* ------------------------------------------------------- native-skin controls
+
+   Replacements for YouTube's own Subscribe / Like / Dislike / Save. They copy
+   YouTube's pill metrics (36px tall, fully rounded, 500/14 Roboto) so the row
+   reads as native, and carry a 2px red border so it is always clear which
+   controls are LocalTube's. */
+
+.lt-native {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 18px;
+  font: 500 14px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: var(--lt-surface);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.lt-native:hover { background: var(--lt-surface-hover); }
+.lt-native:disabled { opacity: .6; cursor: default; }
+.lt-native svg { width: 22px; height: 22px; fill: currentColor; flex: none; }
+
+/* The tell: a full red border. box-sizing keeps the pill at YouTube's 36px
+   rather than growing by the border width. */
+.lt-accent {
+  box-sizing: border-box;
+  border: 2px solid #ff0033;
+}
+
+/* Subscribe: filled when not following, inverted once you are — YouTube's own
+   convention, so the row keeps reading as native. */
+.lt-native-subscribe {
+  color: var(--lt-invert-text);
+  background: var(--lt-invert-bg);
+  padding: 0 18px;
+}
+.lt-native-subscribe:hover { background: var(--lt-invert-bg); filter: brightness(1.15); }
+.lt-native-subscribe[aria-pressed='true'] {
+  color: var(--lt-text);
+  background: var(--lt-surface);
+}
+.lt-native-subscribe[aria-pressed='true']:hover { background: var(--lt-surface-hover); filter: none; }
+
+/* Like + dislike share one pill with a divider, the way YouTube's does. */
+.lt-native-group {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  border-radius: 18px;
+  background: var(--lt-surface);
+  overflow: hidden;
+  margin-right: 8px;
+}
+.lt-native-group .lt-native { background: transparent; border-radius: 0; height: 100%; }
+.lt-native-group .lt-native:hover { background: var(--lt-surface-hover); }
+.lt-native-group .lt-native + .lt-native { box-shadow: inset 1px 0 0 var(--lt-border); }
+/* Off: an outline thumb drawn in the current text colour.
+   On: the solid thumb, filled — white in dark mode, near-black in light,
+   because both come from --lt-text and so stay legible either way. */
+.lt-native[aria-pressed='true'] { font-weight: 600; }
+.lt-native[aria-pressed='true'] svg { fill: var(--lt-text); }
+
+/* A short pop when a thumb is activated. Applied as a class on click and
+   removed on animationend, so it replays on every press rather than firing
+   once when the attribute first changes. */
+.lt-pop svg { animation: lt-pop 320ms cubic-bezier(.2, .9, .3, 1.4); }
+
+@keyframes lt-pop {
+  0%   { transform: scale(1) rotate(0deg); }
+  35%  { transform: scale(1.35) rotate(-9deg); }
+  65%  { transform: scale(.92) rotate(4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Dislike leans the other way, so the gesture reads as its mirror. */
+.lt-pop-down svg { animation: lt-pop-down 320ms cubic-bezier(.2, .9, .3, 1.4); }
+
+@keyframes lt-pop-down {
+  0%   { transform: scale(1) rotate(0deg); }
+  35%  { transform: scale(1.35) rotate(9deg); }
+  65%  { transform: scale(.92) rotate(-4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-pop svg, .lt-pop-down svg { animation: none; }
+}
+
+.lt-native-row { display: inline-flex; align-items: center; gap: 8px; }
+
+/* ------------------------------------------------------- masthead identity */
+
+#localtube-avatar {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  margin-left: 8px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ff6a3d, #f5a524);
+  box-shadow: 0 0 0 2px #ff0033;
+}
+#localtube-avatar svg { width: 18px; height: 18px; fill: #fff; }
+
+#localtube-account-menu {
+  position: absolute;
+  z-index: 2147483000;
+  min-width: 240px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--lt-border);
+  background: var(--lt-menu-bg);
+  color: var(--lt-text);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.4);
+  font: 400 14px/1.4 Roboto, Arial, sans-serif;
+}
+#localtube-account-menu .lt-account-head {
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--lt-border);
+  margin-bottom: 6px;
+}
+#localtube-account-menu .lt-account-name { font-weight: 500; }
+#localtube-account-menu .lt-account-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--lt-text-dim);
+}
+#localtube-account-menu a {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+#localtube-account-menu a:hover { background: var(--lt-surface-hover); }
+
+/* ------------------------------------------------- injected page controls */
+
+.lt-inject {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 14px;
+  height: 36px;
+  font: 500 14px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: var(--lt-surface);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.lt-inject:hover { background: var(--lt-surface-hover); }
+/* Same icon sizing as the native pills — without this an inline <svg> falls
+   back to its 300x150 default and blows the button apart. */
+.lt-inject svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
+.lt-inject:disabled { opacity: .6; cursor: default; }
+.lt-inject[aria-pressed='true'] {
+  color: var(--lt-invert-text);
+  background: var(--lt-invert-bg);
+}
+
+/* --------------------------------------------------------- save popover */
+
+.lt-popover {
+  position: absolute;
+  z-index: 2147483000;
+  min-width: 260px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--lt-menu-bg);
+  color: var(--lt-text);
+  border: 1px solid var(--lt-border);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.4);
+  font: 400 14px/1.4 Roboto, Arial, sans-serif;
+}
+.lt-popover-head {
+  padding: 10px 12px 8px;
+  font: 500 14px/1.3 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+
+.lt-popover-channel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+.lt-popover-channel img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+}
+.lt-popover-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--lt-text);
+}
+.lt-popover-channel .lt-native { height: 32px; padding: 0 14px; }
+
+.lt-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.lt-popover-item:hover { background: var(--lt-surface-hover); }
+.lt-popover form { display: flex; gap: 6px; padding: 8px 10px 4px; }
+.lt-popover input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--lt-border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* ------------------------------------------------------- now-playing bar */
+
+#localtube-queue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--lt-surface);
+  color: var(--lt-text);
+  font: 400 13px/1.4 Roboto, Arial, sans-serif;
+}
+#localtube-queue strong { font-weight: 500; }
+#localtube-queue a { color: inherit; }
+
+/* --------------------------------------------------------- sidebar links */
+
+.lt-guide-link {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 12px;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--lt-text);
+  text-decoration: none;
+  font: 400 14px/1 Roboto, Arial, sans-serif;
+}
+.lt-guide-link:hover { background: var(--lt-surface-hover); }
+.lt-guide-channel { gap: 16px; }
+.lt-guide-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: none;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lt-surface);
+}
+.lt-guide-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lt-guide-avatar-initial {
+  font: 500 12px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+.lt-guide-channel-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lt-guide-more {
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: 400 14px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+
+.lt-guide-section {
+  padding: 12px 12px 4px;
+  font: 500 14px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+  border-top: 1px solid var(--lt-border);
+  margin-top: 12px;
+}

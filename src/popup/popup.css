@@ -1,0 +1,53 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.5 Roboto, Arial, sans-serif; color: #0f0f0f; background: #fff; }
+.wrap { width: 320px; padding: 16px; }
+h1 { font-size: 15px; margin: 0 0 12px; }
+h2 { font-size: 13px; margin: 0 0 8px; }
+
+.card { border: 1px solid #e5e5e5; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+
+.stats { display: flex; gap: 8px; text-align: center; }
+.stat { flex: 1; }
+.stat strong { display: block; font-size: 18px; font-weight: 500; }
+.stat span { font-size: 11px; color: #606060; }
+
+.cta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.cta-row:last-child { margin-bottom: 0; }
+
+.btn {
+  font: inherit; font-weight: 500; border: 0; border-radius: 999px;
+  padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-block;
+}
+.btn-primary { background: #065fd4; color: #fff; }
+.btn-primary:hover { background: #054eae; }
+.btn-ghost { background: #f2f2f2; color: #0f0f0f; }
+.btn-ghost:hover { background: #e5e5e5; }
+.btn-link { background: none; color: #065fd4; padding: 4px 0; font-weight: 500; text-align: left; }
+.btn-link:hover { text-decoration: underline; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.check { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.check em.sub { display: block; margin-top: 3px; font-size: 11px; font-style: normal; color: #606060; line-height: 1.45; }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field span { font-size: 11px; color: #606060; }
+.field input {
+  font: inherit; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+  background: #fff; color: #0f0f0f;
+}
+
+.status { margin: 0 0 8px; padding: 8px 10px; border-radius: 6px; background: #f2f2f2; font-size: 12px; }
+.status.error { background: #fce8e6; color: #a50e0e; }
+.hint { color: #606060; margin: 0 0 8px; font-size: 12px; }
+.footnote { color: #909090; font-size: 11px; line-height: 1.5; margin: 12px 0 0; }
+
+@media (prefers-color-scheme: dark) {
+  body { color: #f1f1f1; background: #0f0f0f; }
+  .card { border-color: #303030; }
+  .btn-ghost { background: #272727; color: #f1f1f1; }
+  .btn-ghost:hover { background: #3f3f3f; }
+  .field input { background: #0f0f0f; color: #f1f1f1; border-color: #303030; }
+  .status { background: #272727; }
+  .status.error { background: #3a1512; color: #f28b82; }
+  .stat span, .hint, .check em.sub { color: #aaa; }
+}
