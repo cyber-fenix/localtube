@@ -13,6 +13,12 @@
 </p>
 
 <p align="center">
+  <a href="https://chromewebstore.google.com/detail/localtube-subscriptions-p/npdpcnchpbekajcgmlihancillfdphhd" target="_blank" rel="noopener">
+    <img src="https://img.shields.io/badge/Add%20to%20Chrome-%20-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white&labelColor=4285F4" alt="Add to Chrome" height="42">
+  </a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT licence">
   <img src="https://img.shields.io/badge/manifest-v3-4285F4" alt="Manifest V3">
   <img src="https://img.shields.io/badge/privacy-nothing%20leaves%20your%20device-2ea44f" alt="Privacy: nothing leaves your device">
@@ -77,7 +83,8 @@ Google.
 
 ## Install
 
-LocalTube isn't on the Chrome Web Store yet. For now, build it from source:
+**[Add to Chrome](https://chromewebstore.google.com/detail/localtube-subscriptions-p/npdpcnchpbekajcgmlihancillfdphhd)**
+— or build it from source:
 
 ```bash
 git clone https://github.com/cyber-fenix/localtube.git
