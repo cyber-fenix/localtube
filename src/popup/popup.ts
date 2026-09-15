@@ -51,11 +51,14 @@ async function refresh(): Promise<void> {
     playlists.reduce((n, p) => n + p.videos.length, 0),
   );
   $<HTMLInputElement>('replaceHome').checked = data.settings.replaceHome;
-  $<HTMLInputElement>('nativeSkin').checked = data.settings.nativeSkin;
   $<HTMLInputElement>('recordHistory').checked = data.settings.recordHistory;
   $<HTMLInputElement>('hideShorts').checked = data.settings.hideShorts;
   $<HTMLInputElement>('notifyUploads').checked = data.settings.notifyUploads;
   $<HTMLInputElement>('feedTtlMinutes').value = String(data.settings.feedTtlMinutes);
+  $<HTMLInputElement>('channelVideoLimit').value = String(data.settings.channelVideoLimit);
+  $<HTMLButtonElement>('toggle-enabled').textContent = t(
+    data.settings.enabled ? 'popup_disable_extension' : 'popup_enable_extension',
+  );
 }
 
 function openYouTube(hash: string): void {
@@ -67,11 +70,6 @@ function openYouTube(hash: string): void {
 
 $<HTMLInputElement>('replaceHome').addEventListener('change', async (event) => {
   await setSettings({ replaceHome: (event.target as HTMLInputElement).checked });
-  setStatus(t('popup_saved_reload'));
-});
-
-$<HTMLInputElement>('nativeSkin').addEventListener('change', async (event) => {
-  await setSettings({ nativeSkin: (event.target as HTMLInputElement).checked });
   setStatus(t('popup_saved_reload'));
 });
 
@@ -95,6 +93,20 @@ $<HTMLInputElement>('feedTtlMinutes').addEventListener('change', async (event) =
   if (!Number.isFinite(minutes) || minutes < 1) return;
   await setSettings({ feedTtlMinutes: Math.min(minutes, 1440) });
   setStatus(t('popup_saved'));
+});
+
+$<HTMLInputElement>('channelVideoLimit').addEventListener('change', async (event) => {
+  const limit = Number((event.target as HTMLInputElement).value);
+  if (!Number.isFinite(limit) || limit < 15) return;
+  await setSettings({ channelVideoLimit: Math.min(Math.round(limit), 500) });
+  setStatus(t('popup_saved'));
+});
+
+$<HTMLButtonElement>('toggle-enabled').addEventListener('click', async () => {
+  const { settings } = await getData();
+  await setSettings({ enabled: !settings.enabled });
+  await refresh();
+  setStatus(t(settings.enabled ? 'popup_saved_disabled' : 'popup_saved_enabled'));
 });
 
 $<HTMLAnchorElement>('open-feed').addEventListener('click', (event) => {

@@ -11,7 +11,6 @@
 
 import { HIDE_SELECTORS } from '@/content/youtube-dom';
 import { signedIn } from '@/content/account';
-import { getSettings } from '@/lib/store';
 
 const STYLE_ID = 'localtube-native-skin';
 const ATTR = 'localtubeNative'; // -> data-localtube-native
@@ -29,14 +28,18 @@ function ensureStylesheet(): void {
   (document.head ?? document.documentElement).appendChild(style);
 }
 
-/** Apply or lift the native skin according to the user's setting. */
+/**
+ * Apply or lift the native skin.
+ *
+ * Always on now — replacing YouTube's signed-out controls is the product, not
+ * an option — except while signed in, where YouTube's own controls belong to
+ * a real account and must never be hidden. Unknown counts as signed out:
+ * hiding a real account's UI on every slow page load is the more expensive
+ * mistake.
+ */
 export async function syncNativeSkin(): Promise<boolean> {
   ensureStylesheet();
-  let { nativeSkin } = await getSettings();
-  // Signed in, YouTube's own controls belong to a real account: no hiding
-  // them, whatever the setting says. Unknown counts as signed out — hiding a
-  // real account's UI on every slow page load is the more expensive mistake.
-  if (signedIn() === true) nativeSkin = false;
+  const nativeSkin = signedIn() !== true;
   document.documentElement.dataset[ATTR] = nativeSkin ? 'hidden' : 'shown';
   return nativeSkin;
 }

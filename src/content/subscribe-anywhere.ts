@@ -12,7 +12,7 @@
 // followed the first author.
 
 import { generation } from '@/content/youtube-dom';
-import { writesAllowed } from '@/content/account';
+import { extensionEnabled, writesAllowed } from '@/content/account';
 import type { Subscription } from '@/types';
 import { nativeSkinOn } from '@/content/native-skin';
 import { flashToast } from '@/content/toast';
@@ -178,6 +178,13 @@ function paint(button: HTMLButtonElement, following: boolean, native: boolean): 
 }
 
 export async function mountSubscribeEverywhere(): Promise<void> {
+  // The master switch, checked here too: this mount is also driven by its own
+  // mutation observer (watchForSubscribeHosts), independent of route().
+  if (!extensionEnabled()) {
+    for (const button of Array.from(document.querySelectorAll(`.${CLASS}`))) button.remove();
+    closeChannelsPopover();
+    return;
+  }
   // Follow is a write: signed in, YouTube's real Subscribe owns the page, and a
   // mid-session sign-in must take existing buttons down, not just stop new ones.
   if (!writesAllowed()) {

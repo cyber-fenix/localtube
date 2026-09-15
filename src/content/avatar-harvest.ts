@@ -13,6 +13,7 @@
 // the MAIN world finds new channels, since it keeps the whole map until
 // then — a lost drain costs a duplicate at worst, never a channel.
 
+import { extensionEnabled } from '@/content/account';
 import { noteHarvestedChannels } from '@/lib/subscriptions';
 
 const ATTR = 'data-localtube-card-channels';
@@ -21,6 +22,12 @@ function drain(): void {
   const root = document.documentElement;
   const raw = root.getAttribute(ATTR);
   if (!raw) return;
+  // Independent of route()'s master-switch check: this drain runs off its
+  // own attribute observer for as long as the content script lives.
+  if (!extensionEnabled()) {
+    root.removeAttribute(ATTR);
+    return;
+  }
   root.removeAttribute(ATTR);
   try {
     const cards: unknown = JSON.parse(raw);

@@ -1,247 +1,710 @@
 {
-  "extName": { "message": "LocalTube - Abos und Playlists ohne Google-Konto" },
-  "extShortName": { "message": "LocalTube" },
-  "extDescription": { "message": "Kanälen folgen, Playlists erstellen und eine YouTube-Startseite nur mit deinen Abos erhalten – alles lokal gespeichert, kein Konto, kein Tracking." },
-
-  "popup_stat_following": { "message": "abonniert" },
-  "popup_stat_playlists": { "message": "Playlists" },
-  "popup_stat_saved_videos": { "message": "gespeicherte Videos" },
-  "popup_open_feed": { "message": "Meinen Feed öffnen" },
-  "popup_open_playlists": { "message": "Playlists" },
-  "popup_homepage_heading": { "message": "Startseite" },
-  "opt_replace_home_label": { "message": "Meinen LocalTube-Feed auf der Startseite und der Abos-Seite anzeigen" },
-  "opt_replace_home_sub": { "message": "Die von dir abonnierten Kanäle stehen auch in der YouTube-Seitenleiste." },
-  "opt_native_skin_label": { "message": "YouTubes Abo-, „Gefällt mir“- und Speichern-Buttons ersetzen" },
-  "opt_native_skin_sub": { "message": "Blendet die abgemeldeten Steuerelemente aus und verwendet die von LocalTube, markiert mit einem roten Rand. Schalte dies aus, um wieder YouTubes echte Buttons zu nutzen." },
-  "opt_record_history_label": { "message": "Wiedergabeverlauf führen" },
-  "opt_record_history_sub": { "message": "Fügt ein Video nach zehn Sekunden Wiedergabe zum LocalTube-Verlauf hinzu. Wird nur in diesem Browser gespeichert; die letzten 500 werden behalten." },
-  "opt_notify_uploads_label": { "message": "Neue Uploads in der Glocke sammeln" },
-  "opt_notify_uploads_sub": { "message": "Fügt YouTubes oberer Leiste eine Glocke hinzu, die neue Videos von abonnierten Kanälen auflistet. LocalTube hat keinen Hintergrunddienst, erkennt sie also nur, während YouTube geöffnet ist – nicht, während der Browser geschlossen ist." },
-  "opt_hide_shorts_label": { "message": "Shorts ausblenden" },
-  "opt_hide_shorts_sub": { "message": "Entfernt Shorts komplett aus dem Feed. Standardmäßig aus, wodurch sie stattdessen in einer eigenen Reihe über deinen Videos angezeigt werden, statt vermischt zu werden." },
-  "opt_feed_ttl_label": { "message": "Kanäle aktualisieren, die älter sind als (Minuten)" },
-  "popup_backup_heading": { "message": "Sicherung" },
-  "popup_backup_hint": { "message": "Alles, was LocalTube weiß, lebt in diesem Browser. Exportiere eine Datei, um es in einen anderen Browser zu übertragen oder eine Kopie aufzubewahren." },
-  "popup_export_backup": { "message": "Sicherung exportieren" },
-  "popup_import_backup": { "message": "Sicherung importieren" },
-  "popup_import_takeout": { "message": "Google-Takeout-subscriptions.csv importieren" },
-  "popup_takeout_hint": { "message": "Takeout: takeout.google.com → YouTube und YouTube Music → Abos." },
-  "popup_footnote": { "message": "Deine Abos, „Gefällt mir“-Angaben und Playlists werden nur in diesem Browser gespeichert. Nichts wird an YouTube oder uns gesendet, und nichts beeinflusst dein Google-Konto oder deine Empfehlungen. LocalTube ist nicht mit YouTube oder Google verbunden." },
-
-  "popup_cancel": { "message": "Abbrechen" },
-  "popup_saved_reload": { "message": "Gespeichert. Lade einen offenen YouTube-Tab neu, um die Änderung zu sehen." },
-  "popup_saved_history_kept": { "message": "Gespeichert. Der bestehende Verlauf bleibt erhalten; lösche ihn auf der Verlaufsseite." },
-  "popup_saved": { "message": "Gespeichert." },
-  "popup_exported": { "message": "$1 exportiert.", "placeholders": { "1": { "content": "$1", "example": "localtube-backup-2026-01-01.json" } } },
-  "popup_import_prompt": { "message": "$1 importieren:", "placeholders": { "1": { "content": "$1", "example": "localtube-backup.json" } } },
-  "popup_import_merge": { "message": "Zusammenführen" },
-  "popup_import_replace": { "message": "Alles ersetzen" },
-  "popup_import_cancelled": { "message": "Import abgebrochen." },
-  "popup_import_replace_confirm": { "message": "Alle LocalTube-Daten in diesem Browser ersetzen? Das kann nicht rückgängig gemacht werden." },
-  "popup_import_summary": { "message": "Importiert: $1 Kanäle, $2 Playlists, $3 Videos, $4 Verlaufseinträge." },
-  "popup_import_failed": { "message": "Import fehlgeschlagen." },
-  "popup_takeout_empty": { "message": "Keine Kanäle in dieser Datei gefunden. Wähle die subscriptions.csv von Takeout." },
-  "popup_takeout_summary": { "message": "$1 Kanäle gefunden, $2 neue hinzugefügt. Öffne deinen Feed, um sie zu laden." },
-
-  "local_only_note": { "message": "LocalTube-Abos, „Gefällt mir“-Angaben und Playlists werden nur in diesem Browser gespeichert. Sie sind nicht mit einem Google-Konto verbunden und beeinflussen keine YouTube-Empfehlungen." },
-  "action_refresh": { "message": "Aktualisieren" },
-  "filter_feed_placeholder": { "message": "Diesen Feed filtern" },
-  "feed_status_updating": { "message": "$1/$2 Kanäle werden aktualisiert…" },
-  "feed_status_failed_count": { "message": "$1 Kanal/Kanäle konnten nicht geladen werden — " },
-  "feed_status_see_which": { "message": "welche anzeigen" },
-  "feed_status_see_which_title": { "message": "Die Abo-Liste öffnen, die den Grund für jeden einzelnen zeigt" },
-  "empty_no_matches_title": { "message": "Keine Treffer" },
-  "empty_feed_no_matches_body": { "message": "Nichts in deinem Feed entspricht „$1“." },
-  "empty_only_shorts_title": { "message": "Nur Shorts vorhanden" },
-  "empty_only_shorts_body": { "message": "Jedes Video in deinem Feed ist gerade ein Short, und Shorts sind ausgeblendet. Schalte sie im Erweiterungs-Popup wieder ein, um sie hier zu sehen." },
-  "empty_feed_title": { "message": "Dein Feed ist leer" },
-  "empty_feed_body": { "message": "Folge ein paar Kanälen mit dem LocalTube-Button auf einer beliebigen Kanal- oder Videoseite, oder importiere deine bestehenden Abos aus einer Google-Takeout-Datei im Erweiterungs-Popup." },
-  "action_view_subscriptions": { "message": "Abos ansehen" },
-  "action_load_more": { "message": "Mehr laden" },
-  "sort_recently_followed": { "message": "Zuletzt abonniert" },
-  "sort_name_az": { "message": "Name (A–Z)" },
-  "videos_count_all": { "message": "$1 Videos" },
-  "videos_count_recent": { "message": "$1 aktuelle Videos" },
-  "latest_label": { "message": "zuletzt $1" },
-  "empty_no_channels_title": { "message": "Noch keine Kanäle" },
-  "empty_no_channels_body": { "message": "Öffne einen beliebigen YouTube-Kanal oder ein Video und nutze den LocalTube-Abo-Button. Um ein bestehendes Konto zu übertragen, importiere eine Google-Takeout-subscriptions.csv im Erweiterungs-Popup." },
-  "channel_name_loading": { "message": "Kanalname wird geladen…" },
-  "feed_unavailable": { "message": "Feed nicht verfügbar ($1) — der Kanal wurde möglicherweise gelöscht" },
-  "no_recent_uploads": { "message": "Keine aktuellen Uploads" },
-  "not_loaded_yet": { "message": "Noch nicht geladen" },
-  "followed_label": { "message": "Abonniert vor $1" },
-  "followed_lower_label": { "message": "abonniert vor $1" },
-  "subscribed_label": { "message": "Abonniert" },
-  "subscribed_title": { "message": "Abonniert in LocalTube — klicken, um das Abo zu beenden" },
-  "load_more_older_videos": { "message": "Weitere ältere Videos laden" },
-  "load_older_videos": { "message": "Ältere Videos laden" },
-  "load_older_videos_title": { "message": "Bei YouTube nach älteren Uploads dieses Kanals fragen und sie in diesem Browser speichern. Verbraucht mehrere MB Datenverkehr." },
-  "loading_ellipsis": { "message": "Wird geladen…" },
-  "loading_count": { "message": "Wird geladen… $1" },
-  "toast_rate_limited": { "message": "YouTube limitiert LocalTube gerade — später erneut versuchen" },
-  "toast_added_older_videos": { "message": "$1 ältere(s) Video(s) von $2 hinzugefügt" },
-  "toast_nothing_older": { "message": "Nichts Älteres zum Laden" },
-  "toast_no_new_videos": { "message": "Keine neuen Videos gefunden" },
-  "toast_could_not_load_older": { "message": "Ältere Videos konnten nicht geladen werden" },
-  "subscriptions_page_title": { "message": "Alle Abos" },
-  "empty_no_channel_match_body": { "message": "Kein abonnierter Kanal entspricht dem." },
-  "filter_subscriptions_placeholder": { "message": "Deine Abos filtern" },
-  "playlists_page_title": { "message": "Playlists" },
-  "action_new_playlist": { "message": "Neue Playlist" },
-  "prompt_playlist_name": { "message": "Playlist-Name" },
-  "no_videos_label": { "message": "Keine Videos" },
-  "videos_count_label": { "message": "$1 Video(s)" },
-  "local_playlist_label": { "message": "Lokal • Playlist" },
-  "action_view_full_playlist": { "message": "Vollständige Playlist ansehen" },
-  "action_rename": { "message": "Umbenennen" },
-  "action_delete": { "message": "Löschen" },
-  "confirm_delete_playlist": { "message": "„$1“ löschen? Das kann nicht rückgängig gemacht werden." },
-  "action_remove_from_playlist": { "message": "Aus Playlist entfernen" },
-  "empty_playlist_not_found_title": { "message": "Playlist nicht gefunden" },
-  "empty_playlist_not_found_body": { "message": "Sie wurde möglicherweise in einem anderen Tab gelöscht." },
-  "action_back_to_playlists": { "message": "Zurück zu den Playlists" },
-  "playlist_owner_copied": { "message": "LocalTube · von YouTube kopiert" },
-  "updated_label": { "message": "Aktualisiert $1" },
-  "just_now": { "message": "gerade eben" },
-  "action_play_all": { "message": "Alle wiedergeben" },
-  "action_shuffle": { "message": "Zufallswiedergabe" },
-  "action_update_from_youtube": { "message": "Von YouTube aktualisieren" },
-  "toast_reading_playlist": { "message": "Diese Playlist wird von YouTube gelesen…" },
-  "toast_reading_playlist_progress": { "message": "Diese Playlist wird von YouTube gelesen… $1 Videos" },
-  "toast_added_new_videos": { "message": "$1 neue(s) Video(s) hinzugefügt" },
-  "toast_already_up_to_date": { "message": "Bereits aktuell" },
-  "toast_could_not_read_playlist": { "message": "Diese Playlist konnte nicht gelesen werden" },
-  "empty_playlist_nothing_saved_title": { "message": "Noch nichts gespeichert" },
-  "empty_playlist_nothing_saved_body": { "message": "Nutze den Speichern-Button unter einem Video, um es hier hinzuzufügen." },
-  "empty_playlist_no_matches_body": { "message": "Nichts in dieser Playlist entspricht „$1“." },
-  "filter_playlist_placeholder": { "message": "Diese Playlist filtern" },
-  "day_today": { "message": "Heute" },
-  "day_yesterday": { "message": "Gestern" },
-  "action_remove_from_history": { "message": "Aus Verlauf entfernen" },
-  "watched_label": { "message": "angesehen vor $1" },
-  "history_page_title": { "message": "Wiedergabeverlauf" },
-  "search_history_placeholder": { "message": "Wiedergabeverlauf durchsuchen" },
-  "action_clear_history": { "message": "Gesamten Verlauf löschen" },
-  "confirm_clear_history": { "message": "Deinen gesamten LocalTube-Wiedergabeverlauf löschen? Das kann nicht rückgängig gemacht werden." },
-  "action_pause_history": { "message": "Verlauf pausieren" },
-  "action_resume_history": { "message": "Verlauf fortsetzen" },
-  "history_note_enabled": { "message": "Wird nach zehn Sekunden Wiedergabe hinzugefügt. Die letzten $1 werden behalten, nur in diesem Browser — YouTube erfährt nie, was du dir angesehen hast." },
-  "history_note_paused": { "message": "Die Aufzeichnung ist pausiert. Es wird nichts Neues hinzugefügt." },
-  "empty_history_no_matches_body": { "message": "Nichts in deinem Verlauf entspricht „$1“." },
-  "empty_history_title": { "message": "Noch nichts angesehen" },
-  "empty_history_body": { "message": "Videos, die du dir auf YouTube ansiehst, erscheinen hier, die neuesten zuerst. Nichts verlässt diesen Browser." },
-  "empty_history_paused_title": { "message": "Der Verlauf ist pausiert" },
-  "empty_history_paused_body": { "message": "Setze die Aufzeichnung fort, um wieder angesehene Videos zu sammeln." },
-
-  "action_more_actions": { "message": "Weitere Aktionen" },
-  "shorts_heading": { "message": "Shorts" },
-  "time_ago_minute_singular": { "message": "vor $1 Minute" },
-  "time_ago_minute_plural": { "message": "vor $1 Minuten" },
-  "time_ago_hour_singular": { "message": "vor $1 Stunde" },
-  "time_ago_hour_plural": { "message": "vor $1 Stunden" },
-  "time_ago_day_singular": { "message": "vor $1 Tag" },
-  "time_ago_day_plural": { "message": "vor $1 Tagen" },
-  "time_ago_month_singular": { "message": "vor $1 Monat" },
-  "time_ago_month_plural": { "message": "vor $1 Monaten" },
-  "time_ago_year_singular": { "message": "vor $1 Jahr" },
-  "time_ago_year_plural": { "message": "vor $1 Jahren" },
-  "views_count": { "message": "$1 Aufrufe" },
-  "views_count_k": { "message": "$1 Tsd. Aufrufe" },
-  "views_count_m": { "message": "$1 Mio. Aufrufe" },
-  "views_count_b": { "message": "$1 Mrd. Aufrufe" },
-
-  "toast_saved_to": { "message": "In $1 gespeichert" },
-  "toast_already_in": { "message": "Bereits in $1" },
-  "action_new_playlist_ellipsis": { "message": "Neue Playlist…" },
-  "action_save_watch_later": { "message": "In „Später ansehen“ speichern" },
-  "action_save_to_playlist": { "message": "In Playlist speichern" },
-  "action_share": { "message": "Teilen" },
-  "toast_link_copied": { "message": "Link kopiert" },
-  "watch_later_name": { "message": "Später ansehen" },
-
-  "notif_uploaded": { "message": "$1 hat hochgeladen: $2" },
-  "notif_empty_head": { "message": "Deine Benachrichtigungen erscheinen hier" },
-  "notif_empty_body": { "message": "Neue Videos von Kanälen, denen du in LocalTube folgst, erscheinen hier. LocalTube prüft, solange YouTube geöffnet ist." },
-  "action_turn_off_notifications": { "message": "Upload-Benachrichtigungen ausschalten" },
-  "action_clear_all": { "message": "Alle löschen" },
-  "notif_brand_label": { "message": "LocalTube-Benachrichtigungen" },
-  "notif_panel_title": { "message": "Benachrichtigungen" },
-  "notif_settings_title": { "message": "Benachrichtigungseinstellungen" },
-  "bell_title": { "message": "LocalTube-Benachrichtigungen — neue Videos von abonnierten Kanälen erscheinen hier" },
-
-  "action_update_in_localtube": { "message": "In LocalTube aktualisieren" },
-  "action_save_to_localtube": { "message": "In LocalTube speichern" },
-  "save_playlist_title_saved": { "message": "Diese Playlist erneut lesen und die LocalTube-Kopie aktualisieren" },
-  "save_playlist_title_unsaved": { "message": "Diese Playlist in LocalTube kopieren — gespeichert in diesem Browser, nicht in einem Google-Konto" },
-  "toast_saved_playlist_all": { "message": "$1 Video(s) als „$2“ gespeichert" },
-  "toast_added_playlist_partial": { "message": "$1 neue(s) Video(s) zu „$2“ hinzugefügt" },
-  "toast_playlist_up_to_date": { "message": "„$1“ ist bereits aktuell" },
-  "truncated_rate_limited": { "message": " — YouTube hat uns limitiert, daher fehlen einige Videos" },
-  "truncated_partial": { "message": " — der erste Teil einer langen Playlist" },
-  "action_open_in_localtube": { "message": "In LocalTube öffnen" },
-  "toast_could_not_save_playlist": { "message": "Diese Playlist konnte nicht gespeichert werden" },
-
-  "action_subscribe": { "message": "Abonnieren" },
-  "action_following": { "message": "Abonniert" },
-  "action_follow": { "message": "Abonnieren" },
-  "follow_title_following": { "message": "Abonniert in LocalTube — gespeichert in diesem Browser, nicht in einem Google-Konto" },
-  "follow_title_not_following": { "message": "In LocalTube abonnieren — gespeichert in diesem Browser, nicht in einem Google-Konto" },
-  "toast_following_channel": { "message": "$1 in LocalTube abonniert" },
-  "toast_unfollowed_channel": { "message": "$1 nicht mehr abonniert" },
-
-  "popover_follow_n_channels": { "message": "$1 Kanäle abonnieren" },
-
-  "toast_removed_from": { "message": "Aus $1 entfernt" },
-  "new_playlist_name_aria": { "message": "Name der neuen Playlist" },
-  "action_create": { "message": "Erstellen" },
-  "like_on_title": { "message": "In deiner lokalen „Gefällt mir“-Liste — nie an YouTube gesendet" },
-  "like_off_title": { "message": "In deiner lokalen „Gefällt mir“-Liste speichern — nie an YouTube gesendet" },
-  "dislike_on_title": { "message": "In deiner lokalen „Gefällt mir nicht“-Liste — nie an YouTube gesendet" },
-  "dislike_off_title": { "message": "Lokal „Gefällt mir nicht“ markieren — nie an YouTube gesendet" },
-  "action_like": { "message": "Gefällt mir" },
-  "action_dislike": { "message": "Gefällt mir nicht" },
-  "action_save": { "message": "Speichern" },
-  "save_button_title": { "message": "In einer LocalTube-Playlist speichern — nur in diesem Browser gespeichert" },
-
-  "queue_position": { "message": "$1 von $2" },
-  "queue_not_in_playlist": { "message": "nicht in dieser Playlist" },
-  "queue_playing_from_prefix": { "message": "Wiedergabe aus " },
-  "queue_shuffled_suffix": { "message": "zufällig" },
-  "queue_next": { "message": "Weiter: $1" },
-  "queue_end": { "message": "Ende der Playlist" },
-  "action_stop": { "message": "Stopp" },
-
-  "nav_my_feed": { "message": "Mein Feed" },
-  "nav_following_link": { "message": "Abonniert" },
-  "account_menu_sub": { "message": "Lokales Profil — nur in diesem Browser, kein Google-Konto" },
-  "avatar_title": { "message": "LocalTube — lokales Profil, kein Google-Konto" },
-  "avatar_aria_label": { "message": "LocalTube-Profil" },
-
-  "account_bar_signed_in": { "message": "Bei YouTube angemeldet — LocalTube ist schreibgeschützt, bis du dich abmeldest." },
-  "account_bar_takeout_link": { "message": "Deine Abos mit Google Takeout exportieren" },
-  "account_bar_import_reminder": { "message": "und die Datei dann im LocalTube-Popup importieren." },
-  "action_dismiss_for_now": { "message": "Vorerst ausblenden" },
-
-  "action_show_fewer": { "message": "Weniger anzeigen" },
-  "action_show_more": { "message": "Mehr anzeigen" },
-  "nav_history": { "message": "Verlauf" },
-  "nav_watch_later": { "message": "Später ansehen" },
-  "nav_liked_videos": { "message": "Gefällt-mir-Videos" },
-
-  "toast_mount_failed": { "message": "LocalTube konnte sich nicht mit der YouTube-Startseite verbinden. Führe __ltDiag() für Details aus." },
-
-  "toast_resumed_at": { "message": "Fortgesetzt bei $1" },
-  "action_play_from_start": { "message": "Von vorn abspielen" },
-
-  "error_cannot_read_page_yet": { "message": "LocalTube kann diese Seite noch nicht lesen" },
-  "error_playlist_could_not_be_read": { "message": "Diese Playlist konnte nicht gelesen werden" },
-  "error_youtube_rate_limiting": { "message": "YouTube limitiert LocalTube gerade" },
-  "error_playlist_nothing_to_save": { "message": "Diese Playlist enthält nichts zu speichern" },
-
-  "error_malformed_feed": { "message": "fehlerhafter Feed" },
-  "error_feed_status": { "message": "Feed $1" },
-  "error_fetch_failed": { "message": "Abruf fehlgeschlagen" },
-  "error_invalid_json": { "message": "Diese Datei ist kein gültiges JSON." },
-  "error_not_a_backup": { "message": "Das sieht nicht nach einer LocalTube-Sicherung aus." },
-  "error_backup_too_new": { "message": "Diese Sicherung wurde mit einer neueren Version von LocalTube erstellt (Format $1). Aktualisiere zuerst die Erweiterung." }
+  "extName": {
+    "message": "LocalTube - Abos und Playlists ohne Google-Konto"
+  },
+  "extShortName": {
+    "message": "LocalTube"
+  },
+  "extDescription": {
+    "message": "Kanälen folgen, Playlists erstellen und eine YouTube-Startseite nur mit deinen Abos erhalten – alles lokal gespeichert, kein Konto, kein Tracking."
+  },
+  "popup_stat_following": {
+    "message": "abonniert"
+  },
+  "popup_stat_playlists": {
+    "message": "Playlists"
+  },
+  "popup_stat_saved_videos": {
+    "message": "gespeicherte Videos"
+  },
+  "popup_open_feed": {
+    "message": "Meinen Feed öffnen"
+  },
+  "popup_open_playlists": {
+    "message": "Playlists"
+  },
+  "popup_homepage_heading": {
+    "message": "Startseite"
+  },
+  "opt_replace_home_label": {
+    "message": "Meinen LocalTube-Feed auf der Startseite und der Abos-Seite anzeigen"
+  },
+  "opt_replace_home_sub": {
+    "message": "Die von dir abonnierten Kanäle stehen auch in der YouTube-Seitenleiste."
+  },
+  "opt_record_history_label": {
+    "message": "Wiedergabeverlauf führen"
+  },
+  "opt_record_history_sub": {
+    "message": "Fügt ein Video nach zehn Sekunden Wiedergabe zum LocalTube-Verlauf hinzu. Wird nur in diesem Browser gespeichert; die letzten 500 werden behalten."
+  },
+  "opt_notify_uploads_label": {
+    "message": "Neue Uploads in der Glocke sammeln"
+  },
+  "opt_notify_uploads_sub": {
+    "message": "Fügt YouTubes oberer Leiste eine Glocke hinzu, die neue Videos von abonnierten Kanälen auflistet. LocalTube hat keinen Hintergrunddienst, erkennt sie also nur, während YouTube geöffnet ist – nicht, während der Browser geschlossen ist."
+  },
+  "opt_hide_shorts_label": {
+    "message": "Shorts ausblenden"
+  },
+  "opt_hide_shorts_sub": {
+    "message": "Entfernt Shorts komplett aus dem Feed. Standardmäßig aus, wodurch sie stattdessen in einer eigenen Reihe über deinen Videos angezeigt werden, statt vermischt zu werden."
+  },
+  "opt_feed_ttl_label": {
+    "message": "Kanäle aktualisieren, die älter sind als (Minuten)"
+  },
+  "popup_backup_heading": {
+    "message": "Sicherung"
+  },
+  "popup_backup_hint": {
+    "message": "Alles, was LocalTube weiß, lebt in diesem Browser. Exportiere eine Datei, um es in einen anderen Browser zu übertragen oder eine Kopie aufzubewahren."
+  },
+  "popup_export_backup": {
+    "message": "Sicherung exportieren"
+  },
+  "popup_import_backup": {
+    "message": "Sicherung importieren"
+  },
+  "popup_import_takeout": {
+    "message": "Google-Takeout-subscriptions.csv importieren"
+  },
+  "popup_takeout_hint": {
+    "message": "Takeout: takeout.google.com → YouTube und YouTube Music → Abos."
+  },
+  "popup_footnote": {
+    "message": "Deine Abos, „Gefällt mir“-Angaben und Playlists werden nur in diesem Browser gespeichert. Nichts wird an YouTube oder uns gesendet, und nichts beeinflusst dein Google-Konto oder deine Empfehlungen. LocalTube ist nicht mit YouTube oder Google verbunden."
+  },
+  "popup_cancel": {
+    "message": "Abbrechen"
+  },
+  "popup_saved_reload": {
+    "message": "Gespeichert. Lade einen offenen YouTube-Tab neu, um die Änderung zu sehen."
+  },
+  "popup_saved_history_kept": {
+    "message": "Gespeichert. Der bestehende Verlauf bleibt erhalten; lösche ihn auf der Verlaufsseite."
+  },
+  "popup_saved": {
+    "message": "Gespeichert."
+  },
+  "popup_exported": {
+    "message": "$1 exportiert.",
+    "placeholders": {
+      "1": {
+        "content": "$1",
+        "example": "localtube-backup-2026-01-01.json"
+      }
+    }
+  },
+  "popup_import_prompt": {
+    "message": "$1 importieren:",
+    "placeholders": {
+      "1": {
+        "content": "$1",
+        "example": "localtube-backup.json"
+      }
+    }
+  },
+  "popup_import_merge": {
+    "message": "Zusammenführen"
+  },
+  "popup_import_replace": {
+    "message": "Alles ersetzen"
+  },
+  "popup_import_cancelled": {
+    "message": "Import abgebrochen."
+  },
+  "popup_import_replace_confirm": {
+    "message": "Alle LocalTube-Daten in diesem Browser ersetzen? Das kann nicht rückgängig gemacht werden."
+  },
+  "popup_import_summary": {
+    "message": "Importiert: $1 Kanäle, $2 Playlists, $3 Videos, $4 Verlaufseinträge."
+  },
+  "popup_import_failed": {
+    "message": "Import fehlgeschlagen."
+  },
+  "popup_takeout_empty": {
+    "message": "Keine Kanäle in dieser Datei gefunden. Wähle die subscriptions.csv von Takeout."
+  },
+  "popup_takeout_summary": {
+    "message": "$1 Kanäle gefunden, $2 neue hinzugefügt. Öffne deinen Feed, um sie zu laden."
+  },
+  "local_only_note": {
+    "message": "LocalTube-Abos, „Gefällt mir“-Angaben und Playlists werden nur in diesem Browser gespeichert. Sie sind nicht mit einem Google-Konto verbunden und beeinflussen keine YouTube-Empfehlungen."
+  },
+  "action_refresh": {
+    "message": "Aktualisieren"
+  },
+  "filter_feed_placeholder": {
+    "message": "Diesen Feed filtern"
+  },
+  "feed_status_updating": {
+    "message": "$1/$2 Kanäle werden aktualisiert…"
+  },
+  "feed_status_failed_count": {
+    "message": "$1 Kanal/Kanäle konnten nicht geladen werden — "
+  },
+  "feed_status_see_which": {
+    "message": "welche anzeigen"
+  },
+  "feed_status_see_which_title": {
+    "message": "Die Abo-Liste öffnen, die den Grund für jeden einzelnen zeigt"
+  },
+  "empty_no_matches_title": {
+    "message": "Keine Treffer"
+  },
+  "empty_feed_no_matches_body": {
+    "message": "Nichts in deinem Feed entspricht „$1“."
+  },
+  "empty_only_shorts_title": {
+    "message": "Nur Shorts vorhanden"
+  },
+  "empty_only_shorts_body": {
+    "message": "Jedes Video in deinem Feed ist gerade ein Short, und Shorts sind ausgeblendet. Schalte sie im Erweiterungs-Popup wieder ein, um sie hier zu sehen."
+  },
+  "empty_feed_title": {
+    "message": "Dein Feed ist leer"
+  },
+  "empty_feed_body": {
+    "message": "Folge ein paar Kanälen mit dem LocalTube-Button auf einer beliebigen Kanal- oder Videoseite, oder importiere deine bestehenden Abos aus einer Google-Takeout-Datei im Erweiterungs-Popup."
+  },
+  "action_view_subscriptions": {
+    "message": "Abos ansehen"
+  },
+  "action_load_more": {
+    "message": "Mehr laden"
+  },
+  "sort_recently_followed": {
+    "message": "Zuletzt abonniert"
+  },
+  "sort_name_az": {
+    "message": "Name (A–Z)"
+  },
+  "videos_count_all": {
+    "message": "$1 Videos"
+  },
+  "videos_count_recent": {
+    "message": "$1 aktuelle Videos"
+  },
+  "latest_label": {
+    "message": "zuletzt $1"
+  },
+  "empty_no_channels_title": {
+    "message": "Noch keine Kanäle"
+  },
+  "empty_no_channels_body": {
+    "message": "Öffne einen beliebigen YouTube-Kanal oder ein Video und nutze den LocalTube-Abo-Button. Um ein bestehendes Konto zu übertragen, importiere eine Google-Takeout-subscriptions.csv im Erweiterungs-Popup."
+  },
+  "channel_name_loading": {
+    "message": "Kanalname wird geladen…"
+  },
+  "feed_unavailable": {
+    "message": "Feed nicht verfügbar ($1) — der Kanal wurde möglicherweise gelöscht"
+  },
+  "no_recent_uploads": {
+    "message": "Keine aktuellen Uploads"
+  },
+  "not_loaded_yet": {
+    "message": "Noch nicht geladen"
+  },
+  "followed_label": {
+    "message": "Abonniert vor $1"
+  },
+  "followed_lower_label": {
+    "message": "abonniert vor $1"
+  },
+  "subscribed_label": {
+    "message": "Abonniert"
+  },
+  "subscribed_title": {
+    "message": "Abonniert in LocalTube — klicken, um das Abo zu beenden"
+  },
+  "load_more_older_videos": {
+    "message": "Weitere ältere Videos laden"
+  },
+  "load_older_videos": {
+    "message": "Ältere Videos laden"
+  },
+  "load_older_videos_title": {
+    "message": "Bei YouTube nach älteren Uploads dieses Kanals fragen und sie in diesem Browser speichern. Verbraucht mehrere MB Datenverkehr."
+  },
+  "loading_ellipsis": {
+    "message": "Wird geladen…"
+  },
+  "loading_count": {
+    "message": "Wird geladen… $1"
+  },
+  "toast_rate_limited": {
+    "message": "YouTube limitiert LocalTube gerade — später erneut versuchen"
+  },
+  "toast_added_older_videos": {
+    "message": "$1 ältere(s) Video(s) von $2 hinzugefügt"
+  },
+  "toast_nothing_older": {
+    "message": "Nichts Älteres zum Laden"
+  },
+  "toast_no_new_videos": {
+    "message": "Keine neuen Videos gefunden"
+  },
+  "toast_could_not_load_older": {
+    "message": "Ältere Videos konnten nicht geladen werden"
+  },
+  "subscriptions_page_title": {
+    "message": "Alle Abos"
+  },
+  "empty_no_channel_match_body": {
+    "message": "Kein abonnierter Kanal entspricht dem."
+  },
+  "filter_subscriptions_placeholder": {
+    "message": "Deine Abos filtern"
+  },
+  "playlists_page_title": {
+    "message": "Playlists"
+  },
+  "action_new_playlist": {
+    "message": "Neue Playlist"
+  },
+  "prompt_playlist_name": {
+    "message": "Playlist-Name"
+  },
+  "no_videos_label": {
+    "message": "Keine Videos"
+  },
+  "videos_count_label": {
+    "message": "$1 Video(s)"
+  },
+  "local_playlist_label": {
+    "message": "Lokal • Playlist"
+  },
+  "action_view_full_playlist": {
+    "message": "Vollständige Playlist ansehen"
+  },
+  "action_rename": {
+    "message": "Umbenennen"
+  },
+  "action_delete": {
+    "message": "Löschen"
+  },
+  "confirm_delete_playlist": {
+    "message": "„$1“ löschen? Das kann nicht rückgängig gemacht werden."
+  },
+  "action_remove_from_playlist": {
+    "message": "Aus Playlist entfernen"
+  },
+  "empty_playlist_not_found_title": {
+    "message": "Playlist nicht gefunden"
+  },
+  "empty_playlist_not_found_body": {
+    "message": "Sie wurde möglicherweise in einem anderen Tab gelöscht."
+  },
+  "action_back_to_playlists": {
+    "message": "Zurück zu den Playlists"
+  },
+  "playlist_owner_copied": {
+    "message": "LocalTube · von YouTube kopiert"
+  },
+  "updated_label": {
+    "message": "Aktualisiert $1"
+  },
+  "just_now": {
+    "message": "gerade eben"
+  },
+  "action_play_all": {
+    "message": "Alle wiedergeben"
+  },
+  "action_shuffle": {
+    "message": "Zufallswiedergabe"
+  },
+  "action_update_from_youtube": {
+    "message": "Von YouTube aktualisieren"
+  },
+  "toast_reading_playlist": {
+    "message": "Diese Playlist wird von YouTube gelesen…"
+  },
+  "toast_reading_playlist_progress": {
+    "message": "Diese Playlist wird von YouTube gelesen… $1 Videos"
+  },
+  "toast_added_new_videos": {
+    "message": "$1 neue(s) Video(s) hinzugefügt"
+  },
+  "toast_already_up_to_date": {
+    "message": "Bereits aktuell"
+  },
+  "toast_could_not_read_playlist": {
+    "message": "Diese Playlist konnte nicht gelesen werden"
+  },
+  "empty_playlist_nothing_saved_title": {
+    "message": "Noch nichts gespeichert"
+  },
+  "empty_playlist_nothing_saved_body": {
+    "message": "Nutze den Speichern-Button unter einem Video, um es hier hinzuzufügen."
+  },
+  "empty_playlist_no_matches_body": {
+    "message": "Nichts in dieser Playlist entspricht „$1“."
+  },
+  "filter_playlist_placeholder": {
+    "message": "Diese Playlist filtern"
+  },
+  "day_today": {
+    "message": "Heute"
+  },
+  "day_yesterday": {
+    "message": "Gestern"
+  },
+  "action_remove_from_history": {
+    "message": "Aus Verlauf entfernen"
+  },
+  "watched_label": {
+    "message": "angesehen vor $1"
+  },
+  "history_page_title": {
+    "message": "Wiedergabeverlauf"
+  },
+  "search_history_placeholder": {
+    "message": "Wiedergabeverlauf durchsuchen"
+  },
+  "action_clear_history": {
+    "message": "Gesamten Verlauf löschen"
+  },
+  "confirm_clear_history": {
+    "message": "Deinen gesamten LocalTube-Wiedergabeverlauf löschen? Das kann nicht rückgängig gemacht werden."
+  },
+  "action_pause_history": {
+    "message": "Verlauf pausieren"
+  },
+  "action_resume_history": {
+    "message": "Verlauf fortsetzen"
+  },
+  "history_note_enabled": {
+    "message": "Wird nach zehn Sekunden Wiedergabe hinzugefügt. Die letzten $1 werden behalten, nur in diesem Browser — YouTube erfährt nie, was du dir angesehen hast."
+  },
+  "history_note_paused": {
+    "message": "Die Aufzeichnung ist pausiert. Es wird nichts Neues hinzugefügt."
+  },
+  "empty_history_no_matches_body": {
+    "message": "Nichts in deinem Verlauf entspricht „$1“."
+  },
+  "empty_history_title": {
+    "message": "Noch nichts angesehen"
+  },
+  "empty_history_body": {
+    "message": "Videos, die du dir auf YouTube ansiehst, erscheinen hier, die neuesten zuerst. Nichts verlässt diesen Browser."
+  },
+  "empty_history_paused_title": {
+    "message": "Der Verlauf ist pausiert"
+  },
+  "empty_history_paused_body": {
+    "message": "Setze die Aufzeichnung fort, um wieder angesehene Videos zu sammeln."
+  },
+  "action_more_actions": {
+    "message": "Weitere Aktionen"
+  },
+  "shorts_heading": {
+    "message": "Shorts"
+  },
+  "time_ago_minute_singular": {
+    "message": "vor $1 Minute"
+  },
+  "time_ago_minute_plural": {
+    "message": "vor $1 Minuten"
+  },
+  "time_ago_hour_singular": {
+    "message": "vor $1 Stunde"
+  },
+  "time_ago_hour_plural": {
+    "message": "vor $1 Stunden"
+  },
+  "time_ago_day_singular": {
+    "message": "vor $1 Tag"
+  },
+  "time_ago_day_plural": {
+    "message": "vor $1 Tagen"
+  },
+  "time_ago_month_singular": {
+    "message": "vor $1 Monat"
+  },
+  "time_ago_month_plural": {
+    "message": "vor $1 Monaten"
+  },
+  "time_ago_year_singular": {
+    "message": "vor $1 Jahr"
+  },
+  "time_ago_year_plural": {
+    "message": "vor $1 Jahren"
+  },
+  "views_count": {
+    "message": "$1 Aufrufe"
+  },
+  "views_count_k": {
+    "message": "$1 Tsd. Aufrufe"
+  },
+  "views_count_m": {
+    "message": "$1 Mio. Aufrufe"
+  },
+  "views_count_b": {
+    "message": "$1 Mrd. Aufrufe"
+  },
+  "toast_saved_to": {
+    "message": "In $1 gespeichert"
+  },
+  "toast_already_in": {
+    "message": "Bereits in $1"
+  },
+  "action_new_playlist_ellipsis": {
+    "message": "Neue Playlist…"
+  },
+  "action_save_watch_later": {
+    "message": "In „Später ansehen“ speichern"
+  },
+  "action_save_to_playlist": {
+    "message": "In Playlist speichern"
+  },
+  "action_share": {
+    "message": "Teilen"
+  },
+  "toast_link_copied": {
+    "message": "Link kopiert"
+  },
+  "watch_later_name": {
+    "message": "Später ansehen"
+  },
+  "notif_uploaded": {
+    "message": "$1 hat hochgeladen: $2"
+  },
+  "notif_empty_head": {
+    "message": "Deine Benachrichtigungen erscheinen hier"
+  },
+  "notif_empty_body": {
+    "message": "Neue Videos von Kanälen, denen du in LocalTube folgst, erscheinen hier. LocalTube prüft, solange YouTube geöffnet ist."
+  },
+  "action_turn_off_notifications": {
+    "message": "Upload-Benachrichtigungen ausschalten"
+  },
+  "action_clear_all": {
+    "message": "Alle löschen"
+  },
+  "notif_brand_label": {
+    "message": "LocalTube-Benachrichtigungen"
+  },
+  "notif_panel_title": {
+    "message": "Benachrichtigungen"
+  },
+  "notif_settings_title": {
+    "message": "Benachrichtigungseinstellungen"
+  },
+  "bell_title": {
+    "message": "LocalTube-Benachrichtigungen — neue Videos von abonnierten Kanälen erscheinen hier"
+  },
+  "action_update_in_localtube": {
+    "message": "In LocalTube aktualisieren"
+  },
+  "action_save_to_localtube": {
+    "message": "In LocalTube speichern"
+  },
+  "save_playlist_title_saved": {
+    "message": "Diese Playlist erneut lesen und die LocalTube-Kopie aktualisieren"
+  },
+  "save_playlist_title_unsaved": {
+    "message": "Diese Playlist in LocalTube kopieren — gespeichert in diesem Browser, nicht in einem Google-Konto"
+  },
+  "toast_saved_playlist_all": {
+    "message": "$1 Video(s) als „$2“ gespeichert"
+  },
+  "toast_added_playlist_partial": {
+    "message": "$1 neue(s) Video(s) zu „$2“ hinzugefügt"
+  },
+  "toast_playlist_up_to_date": {
+    "message": "„$1“ ist bereits aktuell"
+  },
+  "truncated_rate_limited": {
+    "message": " — YouTube hat uns limitiert, daher fehlen einige Videos"
+  },
+  "truncated_partial": {
+    "message": " — der erste Teil einer langen Playlist"
+  },
+  "action_open_in_localtube": {
+    "message": "In LocalTube öffnen"
+  },
+  "toast_could_not_save_playlist": {
+    "message": "Diese Playlist konnte nicht gespeichert werden"
+  },
+  "action_subscribe": {
+    "message": "Abonnieren"
+  },
+  "action_following": {
+    "message": "Abonniert"
+  },
+  "action_follow": {
+    "message": "Abonnieren"
+  },
+  "follow_title_following": {
+    "message": "Abonniert in LocalTube — gespeichert in diesem Browser, nicht in einem Google-Konto"
+  },
+  "follow_title_not_following": {
+    "message": "In LocalTube abonnieren — gespeichert in diesem Browser, nicht in einem Google-Konto"
+  },
+  "toast_following_channel": {
+    "message": "$1 in LocalTube abonniert"
+  },
+  "toast_unfollowed_channel": {
+    "message": "$1 nicht mehr abonniert"
+  },
+  "popover_follow_n_channels": {
+    "message": "$1 Kanäle abonnieren"
+  },
+  "toast_removed_from": {
+    "message": "Aus $1 entfernt"
+  },
+  "new_playlist_name_aria": {
+    "message": "Name der neuen Playlist"
+  },
+  "action_create": {
+    "message": "Erstellen"
+  },
+  "like_on_title": {
+    "message": "In deiner lokalen „Gefällt mir“-Liste — nie an YouTube gesendet"
+  },
+  "like_off_title": {
+    "message": "In deiner lokalen „Gefällt mir“-Liste speichern — nie an YouTube gesendet"
+  },
+  "dislike_on_title": {
+    "message": "In deiner lokalen „Gefällt mir nicht“-Liste — nie an YouTube gesendet"
+  },
+  "dislike_off_title": {
+    "message": "Lokal „Gefällt mir nicht“ markieren — nie an YouTube gesendet"
+  },
+  "action_like": {
+    "message": "Gefällt mir"
+  },
+  "action_dislike": {
+    "message": "Gefällt mir nicht"
+  },
+  "action_save": {
+    "message": "Speichern"
+  },
+  "save_button_title": {
+    "message": "In einer LocalTube-Playlist speichern — nur in diesem Browser gespeichert"
+  },
+  "queue_position": {
+    "message": "$1 von $2"
+  },
+  "queue_not_in_playlist": {
+    "message": "nicht in dieser Playlist"
+  },
+  "queue_playing_from_prefix": {
+    "message": "Wiedergabe aus "
+  },
+  "queue_shuffled_suffix": {
+    "message": "zufällig"
+  },
+  "queue_next": {
+    "message": "Weiter: $1"
+  },
+  "queue_end": {
+    "message": "Ende der Playlist"
+  },
+  "action_stop": {
+    "message": "Stopp"
+  },
+  "nav_my_feed": {
+    "message": "Mein Feed"
+  },
+  "nav_following_link": {
+    "message": "Abonniert"
+  },
+  "account_menu_sub": {
+    "message": "Lokales Profil — nur in diesem Browser, kein Google-Konto"
+  },
+  "avatar_title": {
+    "message": "LocalTube — lokales Profil, kein Google-Konto"
+  },
+  "avatar_aria_label": {
+    "message": "LocalTube-Profil"
+  },
+  "account_bar_signed_in": {
+    "message": "Bei YouTube angemeldet — LocalTube ist schreibgeschützt, bis du dich abmeldest."
+  },
+  "account_bar_takeout_link": {
+    "message": "Deine Abos mit Google Takeout exportieren"
+  },
+  "account_bar_import_reminder": {
+    "message": "und die Datei dann im LocalTube-Popup importieren."
+  },
+  "action_dismiss_for_now": {
+    "message": "Vorerst ausblenden"
+  },
+  "action_show_fewer": {
+    "message": "Weniger anzeigen"
+  },
+  "action_show_more": {
+    "message": "Mehr anzeigen"
+  },
+  "nav_history": {
+    "message": "Verlauf"
+  },
+  "nav_watch_later": {
+    "message": "Später ansehen"
+  },
+  "nav_liked_videos": {
+    "message": "Gefällt-mir-Videos"
+  },
+  "toast_mount_failed": {
+    "message": "LocalTube konnte sich nicht mit der YouTube-Startseite verbinden. Führe __ltDiag() für Details aus."
+  },
+  "toast_resumed_at": {
+    "message": "Fortgesetzt bei $1"
+  },
+  "action_play_from_start": {
+    "message": "Von vorn abspielen"
+  },
+  "error_cannot_read_page_yet": {
+    "message": "LocalTube kann diese Seite noch nicht lesen"
+  },
+  "error_playlist_could_not_be_read": {
+    "message": "Diese Playlist konnte nicht gelesen werden"
+  },
+  "error_youtube_rate_limiting": {
+    "message": "YouTube limitiert LocalTube gerade"
+  },
+  "error_playlist_nothing_to_save": {
+    "message": "Diese Playlist enthält nichts zu speichern"
+  },
+  "error_malformed_feed": {
+    "message": "fehlerhafter Feed"
+  },
+  "error_feed_status": {
+    "message": "Feed $1"
+  },
+  "error_fetch_failed": {
+    "message": "Abruf fehlgeschlagen"
+  },
+  "error_invalid_json": {
+    "message": "Diese Datei ist kein gültiges JSON."
+  },
+  "error_not_a_backup": {
+    "message": "Das sieht nicht nach einer LocalTube-Sicherung aus."
+  },
+  "error_backup_too_new": {
+    "message": "Diese Sicherung wurde mit einer neueren Version von LocalTube erstellt (Format $1). Aktualisiere zuerst die Erweiterung."
+  },
+  "popup_extension_heading": {
+    "message": "Erweiterung"
+  },
+  "popup_disable_hint": {
+    "message": "Schaltet alles ab, was LocalTube auf YouTube tut – den Feed, die eingefügten Buttons, den Seitenleistenbereich – ohne die Erweiterung zu deinstallieren. Deine Daten bleiben unverändert."
+  },
+  "popup_disable_extension": {
+    "message": "Erweiterung deaktivieren"
+  },
+  "popup_enable_extension": {
+    "message": "Erweiterung aktivieren"
+  },
+  "popup_saved_disabled": {
+    "message": "LocalTube ist auf YouTube jetzt deaktiviert. Lade einen offenen YouTube-Tab neu."
+  },
+  "popup_saved_enabled": {
+    "message": "LocalTube ist wieder aktiviert. Lade einen offenen YouTube-Tab neu."
+  },
+  "opt_channel_video_limit_label": {
+    "message": "Bis zu (Videos pro Kanal) behalten"
+  }
 }

@@ -34,6 +34,22 @@ export function writesAllowed(): boolean {
   return signedIn() !== true;
 }
 
+const ENABLED_ATTR = 'localtubeEnabled'; // <- data-localtube-enabled
+
+/**
+ * The master on/off switch from the popup, cached on `<html>` by route() so
+ * every independent mutation observer here can check it synchronously —
+ * mirroring signedIn() above — instead of each doing its own storage read.
+ * Absent (before the first route()) counts as enabled, the ordinary case.
+ */
+export function extensionEnabled(): boolean {
+  return document.documentElement.dataset[ENABLED_ATTR] !== 'no';
+}
+
+export function setExtensionEnabled(value: boolean): void {
+  document.documentElement.dataset[ENABLED_ATTR] = value ? 'yes' : 'no';
+}
+
 /**
  * Call `cb` whenever the answer changes.
  *

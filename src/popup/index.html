@@ -31,13 +31,6 @@
           </span>
         </label>
         <label class="check">
-          <input type="checkbox" id="nativeSkin" />
-          <span>
-            <span data-i18n="opt_native_skin_label">Replace YouTube's Subscribe, Like and Save buttons</span>
-            <em class="sub" data-i18n="opt_native_skin_sub">Hides the signed-out controls and uses LocalTube's, marked with a red edge. Turn this off to use YouTube's real buttons again.</em>
-          </span>
-        </label>
-        <label class="check">
           <input type="checkbox" id="recordHistory" />
           <span>
             <span data-i18n="opt_record_history_label">Keep a watch history</span>
@@ -62,6 +55,10 @@
           <span data-i18n="opt_feed_ttl_label">Refresh channels older than (minutes)</span>
           <input type="number" id="feedTtlMinutes" min="1" max="1440" step="1" />
         </label>
+        <label class="field">
+          <span data-i18n="opt_channel_video_limit_label">Keep up to (videos per channel)</span>
+          <input type="number" id="channelVideoLimit" min="15" max="500" step="5" />
+        </label>
       </section>
 
       <section class="card">
@@ -80,6 +77,17 @@
         <p class="hint" data-i18n="popup_takeout_hint">
           Takeout: takeout.google.com → YouTube and YouTube Music → subscriptions.
         </p>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="popup_extension_heading">Extension</h2>
+        <p class="hint" data-i18n="popup_disable_hint">
+          Turns off everything LocalTube does on YouTube — the feed, the injected buttons, the
+          sidebar section — without uninstalling it. Your data stays exactly as it is.
+        </p>
+        <div class="cta-row">
+          <button class="btn btn-ghost" id="toggle-enabled" data-i18n="popup_disable_extension">Disable extension</button>
+        </div>
       </section>
 
       <p id="status" class="status" hidden></p>

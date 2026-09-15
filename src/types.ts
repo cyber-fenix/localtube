@@ -94,12 +94,18 @@ export interface ProgressEntry {
 }
 
 export interface Settings {
+  /** Master on/off switch. False means LocalTube does nothing on YouTube —
+   *  no feed, no injected buttons, no sidebar section — while the popup
+   *  itself (and this switch) stays reachable to turn it back on. */
+  enabled: boolean;
   /** How long a channel's cached feed stays fresh before revalidating. */
   feedTtlMinutes: number;
+  /** How many videos are kept per channel — the real ceiling, whether they
+   *  arrived via routine refresh, a channel-page harvest, or an explicit
+   *  "Load older videos" deep load. See lib/feed.ts. */
+  channelVideoLimit: number;
   /** Replace YouTube's home grid with the LocalTube feed. */
   replaceHome: boolean;
-  /** Hide YouTube's own signed-out controls and wear its styling instead. */
-  nativeSkin: boolean;
   /** Record watched videos in the local History list. */
   recordHistory: boolean;
   /** Remember where you stopped and pick the video back up there. */
@@ -154,12 +160,12 @@ export interface FeedCacheEntry {
   /** Set when the last fetch failed (deleted channel, network error). */
   error?: string;
   /**
-   * True once the user has explicitly loaded this channel's older videos.
-   *
-   * It raises this channel's cap from CHANNEL_VIDEO_LIMIT to
-   * DEEP_CHANNEL_VIDEO_LIMIT. Without the flag the next routine feed refresh
-   * would merge and trim straight back to the ordinary cap, throwing away
-   * everything the deep load fetched within the TTL.
+   * True once the user has explicitly loaded this channel's older videos via
+   * "Load older videos" (lib/deep-history.ts). Purely informational now — it
+   * no longer changes this channel's cap, which is settings.channelVideoLimit
+   * either way — but it is what lets the subscriptions view say "N videos"
+   * instead of "N recent videos" for a channel whose history goes back
+   * further than the Atom feed's own 15.
    */
   deep?: boolean;
 }

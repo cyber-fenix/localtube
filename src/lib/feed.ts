@@ -27,29 +27,29 @@ const POOL_SIZE = 6;
 export const MAX_FEED_VIDEOS = 400;
 
 /**
- * How many videos are kept per channel.
+ * How many videos are kept per channel, by default.
  *
  * The Atom feed only ever returns 15, but visiting a channel page harvests
- * everything YouTube has rendered there (see content/harvest.ts), so a cache
- * entry can grow well past that. This is what stops a few big channels filling
- * chrome.storage.local, which has no unlimited quota here by design.
+ * everything YouTube has rendered there (see content/harvest.ts), and pressing
+ * "Load older videos" (lib/deep-history.ts) pages back through YouTube's own
+ * channel grid — so a cache entry can grow well past 15. This is what stops a
+ * few big channels filling chrome.storage.local, which has no unlimited quota
+ * here by design.
+ *
+ * ONE real ceiling: `settings.channelVideoLimit` (this constant is only its
+ * default for a fresh install) caps a channel's stored videos no matter how
+ * they arrived — routine refresh, a channel-page harvest, or an explicit deep
+ * load. An earlier version gave a deep-loaded channel a separate, higher fixed
+ * cap (600) that ignored this setting entirely, which is exactly backwards
+ * from what "keep up to N videos per channel" should mean: setting it to 120
+ * still let one press of "Load older videos" balloon a channel to 430.
+ * Raise this setting itself if you want deep-loaded channels to hold more.
  */
 export const CHANNEL_VIDEO_LIMIT = 120;
 
-/**
- * The cap for a channel whose older videos the user explicitly loaded.
- *
- * Deliberately opt-in per channel rather than a bigger default: at roughly
- * 300 bytes of JSON per video, 600 is ~180 KB for one channel, which is fine
- * for the handful someone actually asks for and ruinous as a default across a
- * 300-channel Takeout import — chrome.storage.local has an ordinary quota
- * here by design.
- */
-export const DEEP_CHANNEL_VIDEO_LIMIT = 600;
-
-/** This channel's cap, which depends on whether it was ever deep-loaded. */
-export const videoLimitFor = (entry?: { deep?: boolean }): number =>
-  entry?.deep ? DEEP_CHANNEL_VIDEO_LIMIT : CHANNEL_VIDEO_LIMIT;
+/** This channel's cap. A thin wrapper kept for call-site symmetry with the
+ *  merge functions below, which all take a limit as their last argument. */
+export const videoLimitFor = (baseLimit: number = CHANNEL_VIDEO_LIMIT): number => baseLimit;
 
 /**
  * Combine two lists of the same channel's videos, newest first.
@@ -292,7 +292,12 @@ export async function loadFeed(
         cache[channelId] = {
           ...cache[channelId],
           fetchedAt: Date.now(),
-          videos: mergeVideos(previous, incoming, true, videoLimitFor(cache[channelId])),
+          videos: mergeVideos(
+            previous,
+            incoming,
+            true,
+            videoLimitFor(data.settings.channelVideoLimit),
+          ),
           error: undefined,
         };
       } catch (error) {

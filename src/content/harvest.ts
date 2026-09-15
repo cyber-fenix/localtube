@@ -17,6 +17,7 @@
 //    video lists is not a trade this extension should make.
 
 import { currentRoute } from '@/content/youtube-dom';
+import { extensionEnabled } from '@/content/account';
 import { readContext } from '@/content/page-context';
 import { mergeVideos, videoLimitFor } from '@/lib/feed';
 import { parseAge, parseDuration, parseViews } from '@/lib/parse';
@@ -74,6 +75,9 @@ function stampedVideos(): StampedVideo[] {
 let lastWrite = { channelId: '', count: 0 };
 
 export async function harvestChannelVideos(): Promise<number> {
+  // watchForHarvest() below calls this from its own scroll listener,
+  // independent of route()'s master-switch check.
+  if (!extensionEnabled()) return 0;
   if (currentRoute() !== 'channel') {
     lastWrite = { channelId: '', count: 0 };
     return 0;
@@ -87,7 +91,7 @@ export async function harvestChannelVideos(): Promise<number> {
   if (stamped.length === 0) return 0;
   if (lastWrite.channelId === channelId && stamped.length <= lastWrite.count) return 0;
 
-  const { subscriptions } = await getData();
+  const { subscriptions, settings } = await getData();
   const subscription = subscriptions[channelId];
   // Not a channel you follow: nothing to deepen, and nothing worth keeping.
   if (!subscription) return 0;
@@ -111,7 +115,12 @@ export async function harvestChannelVideos(): Promise<number> {
   const before = cache[channelId]?.videos ?? [];
   // Not authoritative: the feed's exact dates and view counts win, and only the
   // durations and the videos the feed never carried are taken from here.
-  const merged = mergeVideos(before, videos, false, videoLimitFor(cache[channelId]));
+  const merged = mergeVideos(
+    before,
+    videos,
+    false,
+    videoLimitFor(settings.channelVideoLimit),
+  );
 
   let marked = 0;
   for (const video of merged) {

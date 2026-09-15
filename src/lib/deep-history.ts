@@ -16,7 +16,7 @@ import {
   channelVideosViaInnertube,
   innertubeAvailable,
 } from '@/lib/innertube';
-import { DEEP_CHANNEL_VIDEO_LIMIT, mergeVideos } from '@/lib/feed';
+import { mergeVideos } from '@/lib/feed';
 import { parseAge, parseDuration, parseViews } from '@/lib/parse';
 import { getData, getFeedCache, putFeedCache } from '@/lib/store';
 import type { Video } from '@/types';
@@ -59,7 +59,8 @@ export async function loadChannelHistory(
   const before = cache[channelId]?.videos ?? [];
   if (!innertubeAvailable()) return { added: 0, total: before.length, complete: false };
 
-  const { subscriptions } = await getData();
+  const { subscriptions, settings } = await getData();
+  const limit = settings.channelVideoLimit;
   const subscription = subscriptions[channelId];
   // The standing rule: LocalTube keeps no record of channels you did not ask
   // for, and this is a lot of record.
@@ -102,7 +103,7 @@ export async function loadChannelHistory(
         complete = true;
         break;
       }
-      if (collected.length >= DEEP_CHANNEL_VIDEO_LIMIT) break;
+      if (collected.length >= limit) break;
       await sleep(PAGE_PAUSE_MS);
     }
   } catch (error) {
@@ -116,7 +117,7 @@ export async function loadChannelHistory(
   // Not authoritative: the Atom feed's exact publish dates and view counts win
   // over these, which are parsed from "3 months ago" and "756K views". What
   // this side uniquely brings is the videos the feed never carried at all.
-  const merged = mergeVideos(before, collected, false, DEEP_CHANNEL_VIDEO_LIMIT);
+  const merged = mergeVideos(before, collected, false, limit);
   const fresh = await getFeedCache();
   fresh[channelId] = {
     ...fresh[channelId],

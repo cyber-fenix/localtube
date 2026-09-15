@@ -14,7 +14,7 @@ import {
   onNavigate,
   stopNavigationWatch,
 } from '@/content/youtube-dom';
-import { onAccountChange } from '@/content/account';
+import { extensionEnabled, onAccountChange, setExtensionEnabled } from '@/content/account';
 import { watchCardChannelHarvest } from '@/content/avatar-harvest';
 import { syncAccountBar } from '@/content/account-bar';
 import { renderHome, unmountHome } from '@/content/home';
@@ -44,9 +44,38 @@ import { closeCardMenu } from '@/ui/menu';
 import { nativeSkinOn } from '@/content/native-skin';
 import { syncTheme, watchTheme } from '@/content/theme';
 import { VIEW_CHANGED } from '@/ui/views';
-import { ContextInvalidated, onDataChanged } from '@/lib/store';
+import { ContextInvalidated, getSettings, onDataChanged } from '@/lib/store';
+
+/**
+ * Remove every node LocalTube put on the page, and the flags that scope its
+ * stylesheets. Shared by the disabled path and teardown() — the two cases
+ * that both mean "make this page look like the extension isn't here."
+ */
+function clearInjectedUI(): void {
+  unmountHome();
+  for (const el of Array.from(
+    document.querySelectorAll('[id^="localtube-"], .lt-follow-anywhere, .localtube-guide-entry, .lt-guide-rule'),
+  ))
+    el.remove();
+  for (const el of Array.from(document.querySelectorAll('.localtube-active')))
+    el.classList.remove('localtube-active');
+  delete document.documentElement.dataset.localtubeNative;
+  delete document.documentElement.dataset.localtubeBar;
+}
 
 async function route(): Promise<void> {
+  // The master switch: checked before anything else touches the page, and
+  // nothing below it assumes storage is even reachable yet. Stamped onto
+  // <html> (see content/account.ts) so every independent mutation observer
+  // in this file — the subscribe, harvest and avatar-harvest watchers — can
+  // also stand down, not just this route.
+  const enabled = (await getSettings()).enabled;
+  setExtensionEnabled(enabled);
+  if (!enabled) {
+    clearInjectedUI();
+    return;
+  }
+
   // Cheap, and YouTube's theme can change without a navigation.
   syncTheme();
   // Must settle before the mounts: they style themselves according to whether
@@ -97,14 +126,7 @@ function teardown(): void {
   // OLD script's styling and listeners alive in a tab the new script never
   // sees, so an extension reload looks like "nothing changed" until the tab is
   // reloaded.
-  for (const el of Array.from(
-    document.querySelectorAll('[id^="localtube-"], .lt-follow-anywhere, .localtube-guide-entry, .lt-guide-rule'),
-  ))
-    el.remove();
-  for (const el of Array.from(document.querySelectorAll('.localtube-active')))
-    el.classList.remove('localtube-active');
-  delete document.documentElement.dataset.localtubeNative;
-  delete document.documentElement.dataset.localtubeBar;
+  clearInjectedUI();
   console.info('[LocalTube] extension reloaded — reload this tab to use the new version');
 }
 
@@ -158,7 +180,7 @@ function watchForMissingControls(): void {
   let queued = false;
   const check = (): void => {
     queued = false;
-    if (stopped) return;
+    if (stopped || !extensionEnabled()) return;
     if (currentRoute() === 'watch' && !document.getElementById(ROW_ID))
       void mountVideoActions().catch(() => undefined);
     if (nativeSkinOn() && !document.getElementById(AVATAR_ID))

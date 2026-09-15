@@ -54,9 +54,10 @@ const DATA_KEY = 'localtube_data_v1';
 const CACHE_KEY = 'localtube_feed_cache';
 
 export const DEFAULT_SETTINGS: Settings = {
+  enabled: true,
   feedTtlMinutes: 20,
+  channelVideoLimit: 120,
   replaceHome: true,
-  nativeSkin: true,
   recordHistory: true,
   resumePlayback: true,
   hideShorts: false,

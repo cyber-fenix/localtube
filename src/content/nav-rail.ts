@@ -30,7 +30,13 @@ export const CHANNELS_ID = 'localtube-guide-channels';
 
 /** How many channels the sidebar shows before "Show more". */
 const COLLAPSED = 7;
-let expanded = false;
+/** How many more channels one "Show more" press reveals. */
+const PAGE_SIZE = 50;
+/** How many channels are currently shown. Grows by PAGE_SIZE per press rather
+ *  than jumping straight to "all" — a 300-channel Takeout import turned one
+ *  click into a wall of rows otherwise. Resets to COLLAPSED once every channel
+ *  is already shown and "Show less" is pressed. */
+let shownCount = COLLAPSED;
 
 const CHEVRON_RIGHT =
   'M8.793 5.293a1 1 0 000 1.414L14.086 12l-5.293 5.293a1 1 0 101.414 1.414L16.914 12l-6.707-6.707a1 1 0 00-1.414 0Z';
@@ -272,9 +278,10 @@ export async function renderGuideChannels(): Promise<void> {
   const channels = await listSubscriptions();
   if (gen !== generation()) return;
 
-  const wanted = (expanded ? channels : channels.slice(0, COLLAPSED)).length +
-    (channels.length > COLLAPSED ? 1 : 0);
-  const signature = `${expanded ? 'x' : 'c'}:${channels.map((c) => c.id).join(',')}`;
+  const visibleCount = Math.min(shownCount, channels.length);
+  const atEnd = visibleCount >= channels.length;
+  const wanted = visibleCount + (channels.length > COLLAPSED ? 1 : 0);
+  const signature = `${visibleCount}:${channels.map((c) => c.id).join(',')}`;
   const existing = document.querySelectorAll(`.${ENTRY_CLASS}[data-lt-entry="channel"]`);
   if (lastChannelSignature === signature && existing.length === wanted) {
     ensureChannelsMarker(subs);
@@ -284,7 +291,7 @@ export async function renderGuideChannels(): Promise<void> {
 
   for (const old of Array.from(existing)) old.remove();
 
-  const shown = expanded ? channels : channels.slice(0, COLLAPSED);
+  const shown = channels.slice(0, visibleCount);
   let after: HTMLElement = subs;
   const specs: [HTMLElement, EntrySpec][] = [];
 
@@ -300,10 +307,10 @@ export async function renderGuideChannels(): Promise<void> {
 
   if (channels.length > COLLAPSED) {
     const spec: EntrySpec = {
-      title: t(expanded ? 'action_show_fewer' : 'action_show_more'),
-      icon: expanded ? CHEVRON_UP : CHEVRON_DOWN,
+      title: t(atEnd ? 'action_show_fewer' : 'action_show_more'),
+      icon: atEnd ? CHEVRON_UP : CHEVRON_DOWN,
       onClick: () => {
-        expanded = !expanded;
+        shownCount = atEnd ? COLLAPSED : Math.min(shownCount + PAGE_SIZE, channels.length);
         void renderGuideChannels();
       },
     };
