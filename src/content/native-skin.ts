@@ -10,6 +10,7 @@
 // attribute restores YouTube's page exactly as it was; nothing is removed.
 
 import { HIDE_SELECTORS } from '@/content/youtube-dom';
+import { signedIn } from '@/content/account';
 import { getSettings } from '@/lib/store';
 
 const STYLE_ID = 'localtube-native-skin';
@@ -31,7 +32,11 @@ function ensureStylesheet(): void {
 /** Apply or lift the native skin according to the user's setting. */
 export async function syncNativeSkin(): Promise<boolean> {
   ensureStylesheet();
-  const { nativeSkin } = await getSettings();
+  let { nativeSkin } = await getSettings();
+  // Signed in, YouTube's own controls belong to a real account: no hiding
+  // them, whatever the setting says. Unknown counts as signed out — hiding a
+  // real account's UI on every slow page load is the more expensive mistake.
+  if (signedIn() === true) nativeSkin = false;
   document.documentElement.dataset[ATTR] = nativeSkin ? 'hidden' : 'shown';
   return nativeSkin;
 }

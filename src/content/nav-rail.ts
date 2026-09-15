@@ -18,6 +18,7 @@
 //    the window in which they are right.
 
 import { anchor, generation, waitForAnchor } from '@/content/youtube-dom';
+import { writesAllowed } from '@/content/account';
 import { listSubscriptions } from '@/lib/subscriptions';
 import { go, viewHash, type View } from '@/ui/views';
 
@@ -89,19 +90,29 @@ function paintEntry(entry: HTMLElement, spec: EntrySpec): void {
   const icon = entry.querySelector('yt-icon.guide-icon, span.lt-guide-icon, img.lt-guide-avatar');
   if (icon) {
     if (spec.avatar) {
-      const img = document.createElement('img');
-      img.className = 'lt-guide-avatar';
-      img.width = 24;
-      img.height = 24;
-      img.alt = '';
-      img.loading = 'lazy';
-      img.src = spec.avatar;
-      icon.replaceWith(img);
+      // Idempotent: repaints run more than once, so an already-wright avatar is
+      // left alone rather than swapped for an identical node (each replaceWith
+      // is a pair of childList mutations that re-arms every observer watching
+      // the guide).
+      const already =
+        icon instanceof HTMLImageElement && icon.getAttribute('src') === spec.avatar;
+      if (!already) {
+        const img = document.createElement('img');
+        img.className = 'lt-guide-avatar';
+        img.width = 24;
+        img.height = 24;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = spec.avatar;
+        icon.replaceWith(img);
+      }
     } else if (spec.icon) {
-      const span = document.createElement('span');
-      span.className = 'guide-icon style-scope ytd-guide-entry-renderer lt-guide-icon';
-      span.appendChild(svgIcon(spec.icon));
-      icon.replaceWith(span);
+      if (!(icon instanceof HTMLElement && icon.classList.contains('lt-guide-icon'))) {
+        const span = document.createElement('span');
+        span.className = 'guide-icon style-scope ytd-guide-entry-renderer lt-guide-icon';
+        span.appendChild(svgIcon(spec.icon));
+        icon.replaceWith(span);
+      }
     } else {
       icon.setAttribute('hidden', '');
     }
@@ -121,20 +132,85 @@ function paintEntry(entry: HTMLElement, spec: EntrySpec): void {
   if (spec.header) {
     entry.dataset.ltHeader = '';
     const arrow = entry.querySelector('yt-icon.arrow-icon, span.lt-guide-arrow');
-    const span = document.createElement('span');
-    span.className = 'arrow-icon style-scope ytd-guide-entry-renderer lt-guide-arrow';
-    span.appendChild(svgIcon(CHEVRON_RIGHT));
-    if (arrow) arrow.replaceWith(span);
-    else entry.querySelector('tp-yt-paper-item')?.appendChild(span);
+    if (!(arrow instanceof HTMLElement && arrow.classList.contains('lt-guide-arrow'))) {
+      const span = document.createElement('span');
+      span.className = 'arrow-icon style-scope ytd-guide-entry-renderer lt-guide-arrow';
+      span.appendChild(svgIcon(CHEVRON_RIGHT));
+      if (arrow) arrow.replaceWith(span);
+      else entry.querySelector('tp-yt-paper-item')?.appendChild(span);
+    }
   }
-
-  if (spec.onClick) {
-    (entry as HTMLElement & { onclick: ((e: Event) => void) | null }).onclick = (event: Event) => {
-      event.preventDefault();
-      spec.onClick?.();
-    };
-  }
+  // Clicks are intercepted at the window (see disarmPolymerGestures), so the
+  // handler lives in a WeakMap there rather than as a per-entry listener.
 }
+
+/**
+ * Keep YouTube's gesture recognizer away from cloned entries, and replace the
+ * navigation it would have provided.
+ *
+ * Polymer upgrades our clones on insert and wires its own listeners to them,
+ * but a clone carries none of the `data` those listeners expect. The live
+ * stack from a channel-page click:
+ *
+ *   Cannot read properties of undefined (reading 'serviceEndpoint')
+ *   at B.onTap … at Object.click … at Object._fire … | gestures._fire
+ *
+ * proves `tap` is synthesised from the native **click**, not only from the
+ * down events. Worse for the user, the tap handler preventDefaults the real
+ * navigation before it crashes — which is exactly "click, an error, nothing
+ * happens." So the shield stops `click` too, and replaces what it took: an
+ * entry with a click handler calls it here, an entry with only an href gets a
+ * plain `location.assign`. That is a full page load rather than an SPA
+ * transition — the same trade `openView` already makes for cross-page moves,
+ * and the only navigation route that cannot crash inside Polymer again.
+ *
+ * Everything sits at `window` capture — the outermost point an event passes.
+ * An earlier version listened on the clone itself and shipped broken: Polymer's
+ * handlers sit on the SAME element, registered during upgrade before any
+ * listener we can add to it, and listeners on one node fire in registration
+ * order. At `window`, the event never reaches the clone on any upgrade timing.
+ */
+const clickHandlers = new WeakMap<HTMLElement, () => void>();
+let gestureShieldInstalled = false;
+
+function disarmPolymerGestures(): void {
+  if (gestureShieldInstalled) return;
+  gestureShieldInstalled = true;
+  const cloneOf = (event: Event): HTMLElement | null => {
+    for (const node of event.composedPath())
+      if (node instanceof HTMLElement && node.classList.contains(ENTRY_CLASS)) return node;
+    return null;
+  };
+  for (const type of ['pointerdown', 'mousedown', 'touchstart'])
+    window.addEventListener(
+      type,
+      (event) => {
+        if (cloneOf(event)) event.stopPropagation();
+      },
+      { capture: true },
+    );
+  window.addEventListener(
+    'click',
+    (event) => {
+      const entry = cloneOf(event);
+      if (!entry) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const handler = clickHandlers.get(entry);
+      if (handler) {
+        handler();
+        return;
+      }
+      const href = entry.querySelector('a#endpoint')?.getAttribute('href');
+      if (href) location.assign(href);
+    },
+    { capture: true },
+  );
+}
+
+// Installed at module load, before the first clone exists: the shield has to
+// be in place before any entry can be clicked, not just the ones built later.
+disarmPolymerGestures();
 
 /** Clone the template entry, insert after `after`, then paint it. */
 function addEntry(template: HTMLElement, after: HTMLElement, spec: EntrySpec, tag: string): HTMLElement {
@@ -147,6 +223,7 @@ function addEntry(template: HTMLElement, after: HTMLElement, spec: EntrySpec, ta
   after.parentElement?.insertBefore(entry, after.nextSibling);
   // Inserted first: Polymer upgrades on insert and would undo an earlier paint.
   paintEntry(entry, spec);
+  if (spec.onClick) clickHandlers.set(entry, spec.onClick);
   return entry;
 }
 
@@ -156,7 +233,36 @@ function addEntry(template: HTMLElement, after: HTMLElement, spec: EntrySpec, ta
  * The followed-channel list, directly beneath YouTube's own Subscriptions row,
  * which is where a signed-in account shows it.
  */
+/**
+ * Signature of what the sidebar currently shows. Rebuilding is deliberately
+ * skipped when it already matches: every clone insert goes through Polymer's
+ * upgrade machinery and each remove/add pair re-arms the mutation observer in
+ * content/index.ts, which can escalate into a rebuild loop (observed on a live
+ * page as the hover wash blinking several times per second and every click
+ * landing on an entry that no longer existed). If YouTube genuinely re-renders
+ * the guide, our entries simply vanish from the DOM and the count check below
+ * notices — the signature alone is not trusted.
+ */
+let lastChannelSignature: string | null = null;
+
 export async function renderGuideChannels(): Promise<void> {
+  // Signed in, the sidebar's channel list is the account's REAL one, rendered
+  // by YouTube in the very slot we use when signed out — and its Polymer
+  // renderer re-renders that list, deleting foreign children as it goes. Ours
+  // either vanish or (worse) interleave with YouTube's, which shipped live as
+  // "one LocalTube channel, then YouTube's list". LocalTube's channels simply
+  // do not belong here while signed in: remove any that exist, and replace
+  // them on sign-out via the normal path.
+  if (!writesAllowed()) {
+    for (const old of Array.from(
+      document.querySelectorAll(`.${ENTRY_CLASS}[data-lt-entry="channel"], .lt-guide-rule[data-lt-rule="subs"]`),
+    ))
+      old.remove();
+    document.getElementById(CHANNELS_ID)?.remove();
+    lastChannelSignature = null;
+    return;
+  }
+
   const gen = generation();
   const subs = subscriptionsEntry();
   if (!subs) return;
@@ -164,8 +270,17 @@ export async function renderGuideChannels(): Promise<void> {
   const channels = await listSubscriptions();
   if (gen !== generation()) return;
 
-  for (const old of Array.from(document.querySelectorAll(`.${ENTRY_CLASS}[data-lt-entry="channel"]`)))
-    old.remove();
+  const wanted = (expanded ? channels : channels.slice(0, COLLAPSED)).length +
+    (channels.length > COLLAPSED ? 1 : 0);
+  const signature = `${expanded ? 'x' : 'c'}:${channels.map((c) => c.id).join(',')}`;
+  const existing = document.querySelectorAll(`.${ENTRY_CLASS}[data-lt-entry="channel"]`);
+  if (lastChannelSignature === signature && existing.length === wanted) {
+    ensureChannelsMarker(subs);
+    return;
+  }
+  lastChannelSignature = signature;
+
+  for (const old of Array.from(existing)) old.remove();
 
   const shown = expanded ? channels : channels.slice(0, COLLAPSED);
   let after: HTMLElement = subs;
@@ -216,12 +331,7 @@ export async function renderGuideChannels(): Promise<void> {
   // A marker so the self-healing observer in content/index.ts can tell "the
   // guide was re-rendered and took the channel list with it" from "there are
   // no channels to list" — without it, the check fires on every mutation.
-  if (!document.getElementById(CHANNELS_ID)) {
-    const marker = document.createElement('div');
-    marker.id = CHANNELS_ID;
-    marker.hidden = true;
-    subs.parentElement?.insertBefore(marker, subs);
-  }
+  ensureChannelsMarker(subs);
 
   // One repaint shortly after insertion covers the upgrade; nothing painted here
   // is Polymer-managed any more, so it stays put after that.
@@ -237,6 +347,15 @@ function rule(owner: string): HTMLElement {
   line.className = 'lt-guide-rule';
   line.dataset.ltRule = owner;
   return line;
+}
+
+/** Insert the "channels were rendered here" marker if it is missing. */
+function ensureChannelsMarker(subs: HTMLElement): void {
+  if (document.getElementById(CHANNELS_ID)) return;
+  const marker = document.createElement('div');
+  marker.id = CHANNELS_ID;
+  marker.hidden = true;
+  subs.parentElement?.insertBefore(marker, subs);
 }
 
 /* ------------------------------------------------------- LocalTube's own section */
@@ -297,13 +416,35 @@ export async function mountNavRail(): Promise<void> {
   const subs = subscriptionsEntry();
   if (!subs) return;
 
-  // Idempotent: rebuilt only when absent, so re-running does not duplicate.
-  if (document.getElementById(SECTION_ID)) return;
+  // Signed in, the entries' own list re-renders around the account's real
+  // channel list and deletes foreign children on every pass — it ate this
+  // section whole. Above the items list, though, each SECTION is a sibling,
+  // and a block sitting among the sections only dies in a full-sections
+  // rebuild, which is rare and which the self-healing observer restores. So
+  // placement depends on the account state: positioned within the entries list
+  // signed out, after the last whole section signed in.
+  const signedInMode = !writesAllowed();
+  const parent = signedInMode
+    ? (subs.closest('ytd-guide-section-renderer')?.parentElement ?? subs.parentElement)
+    : subs.parentElement;
+  if (!parent) return;
+
+  // A mode flip relocates the section: remove what the old placement left.
+  const existing = document.getElementById(SECTION_ID);
+  if (existing) {
+    if ((existing.dataset.ltPlacement === 'end') === signedInMode) return;
+    for (const old of Array.from(
+      document.querySelectorAll(`.${ENTRY_CLASS}[data-lt-entry="link"], .lt-guide-rule[data-lt-rule="lt"]`),
+    ))
+      old.remove();
+    existing.remove();
+  }
 
   const marker = document.createElement('div');
   marker.id = SECTION_ID;
   marker.hidden = true;
-  subs.parentElement?.appendChild(marker);
+  marker.dataset.ltPlacement = signedInMode ? 'end' : 'inline';
+  parent.appendChild(marker);
   marker.parentElement?.insertBefore(rule('lt'), marker);
 
   const specs: [HTMLElement, EntrySpec][] = [];

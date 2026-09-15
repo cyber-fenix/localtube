@@ -131,7 +131,8 @@ $<HTMLInputElement>('file-backup').addEventListener('change', async (event) => {
     await refresh();
     setStatus(
       `Imported ${summary.subscriptions} channel${summary.subscriptions === 1 ? '' : 's'}, ` +
-        `${summary.playlists} playlist${summary.playlists === 1 ? '' : 's'}, ${summary.videos} videos.`,
+        `${summary.playlists} playlist${summary.playlists === 1 ? '' : 's'}, ${summary.videos} videos, ` +
+        `${summary.history} history entries.`,
     );
   } catch (error) {
     setStatus(error instanceof Error ? error.message : 'Import failed.', { error: true });

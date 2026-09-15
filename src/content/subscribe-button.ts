@@ -8,11 +8,12 @@
 // account.
 
 import { anchor, currentRoute, generation, waitForAnchor } from '@/content/youtube-dom';
+import { writesAllowed } from '@/content/account';
 import { nativeSkinOn } from '@/content/native-skin';
 import { readContext, waitForContext } from '@/content/page-context';
 import { singleFlight } from '@/content/single-flight';
 import { flashToast } from '@/content/toast';
-import { isSubscribed, toggleSubscription } from '@/lib/subscriptions';
+import { isSubscribed, noteChannelDetails, toggleSubscription } from '@/lib/subscriptions';
 
 const BUTTON_ID = 'localtube-follow';
 
@@ -47,7 +48,12 @@ function paint(button: HTMLButtonElement, following: boolean, native: boolean): 
 export const mountSubscribeButton = singleFlight(mountSubscribeButtonOnce);
 
 async function mountSubscribeButtonOnce(): Promise<void> {
-  if (currentRoute() !== 'channel') return;
+  // Follow is a write: signed in, YouTube's real Subscribe owns the header, and
+  // a mid-session sign-in must take this button down, not just stop new mounts.
+  if (currentRoute() !== 'channel' || !writesAllowed()) {
+    document.getElementById(BUTTON_ID)?.remove();
+    return;
+  }
 
   // YouTube renders the channel header after document_idle, so the anchor is
   // usually absent on the first pass. Wait for it rather than giving up.
@@ -70,7 +76,14 @@ async function mountSubscribeButtonOnce(): Promise<void> {
     id: context.channelId,
     title: context.channelTitle ?? context.channelId,
     avatar: context.avatar,
+    handle: context.handle,
+    subscribers: context.subscribers,
   };
+
+  // Visiting a channel you already follow is the chance to learn its @handle
+  // and subscriber count — neither of which the feed carries, and neither of
+  // which a Takeout import brings with it.
+  void noteChannelDetails(channel).catch(() => undefined);
 
   paint(button, await isSubscribed(channel.id), native);
   button.onclick = async () => {

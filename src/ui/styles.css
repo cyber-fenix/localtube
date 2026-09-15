@@ -26,6 +26,9 @@
   --lt-invert-text: #fff;
   --lt-danger: #c00;
   --lt-stack: rgba(0, 0, 0, 0.35);
+  /* The watched bar's track. Measured on a live signed-in page in each theme:
+     lighter in light, darker in dark. */
+  --lt-progress-track: rgb(144, 144, 144);
 }
 
 html[data-localtube-theme='dark'],
@@ -46,6 +49,7 @@ html[dark] {
   /* The stack layers behind a playlist cover: lighter than the page, the way
      YouTube's are, so they read as sheets under the thumbnail. */
   --lt-stack: rgba(255, 255, 255, 0.35);
+  --lt-progress-track: rgb(113, 113, 113);
 }
 
 /* An explicit light stamp always wins, even under html[dark]. */
@@ -63,6 +67,9 @@ html[data-localtube-theme='light'] {
   --lt-invert-text: #fff;
   --lt-danger: #c00;
   --lt-stack: rgba(0, 0, 0, 0.35);
+  /* The watched bar's track. Measured on a live signed-in page in each theme:
+     lighter in light, darker in dark. */
+  --lt-progress-track: rgb(144, 144, 144);
 }
 
 #localtube-root {
@@ -101,38 +108,36 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 
 /* --------------------------------------------------------------- chrome */
 
-.lt-header {
+/* A view's own controls — the feed's Refresh, and nothing else. LocalTube used
+   to carry a tab bar here; the sidebar's LocalTube section reaches every view,
+   so a second set of navigation on top of every page was noise. */
+/* Anything sitting directly in the page column lines up with the grids below
+   it, whose items are inset 8px the way YouTube's are. Blocks nested in a view's
+   own wrapper (Subscriptions, History) are aligned by that wrapper instead.
+   margin, not padding: padding moves the text but leaves the element's box at
+   the column edge, so a measurement keeps reporting the old x. */
+#localtube-root > .lt-actions,
+#localtube-root > .lt-title-row,
+#localtube-root > .lt-page-title,
+#localtube-root > .lt-note { margin-inline: 8px; }
+
+.lt-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  min-height: 32px;
 }
 
-.lt-tab {
-  border: none;
-  border-radius: 999px;
-  padding: 8px 16px;
-  font: 500 14px/1 Roboto, Arial, sans-serif;
-  color: var(--lt-text);
-  background: var(--lt-surface);
-  cursor: pointer;
+/* A page title with a single action beside it. */
+.lt-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
-.lt-tab:hover { background: var(--lt-surface-hover); }
-.lt-tab[aria-selected='true'] {
-  color: var(--lt-invert-text);
-  background: var(--lt-invert-bg);
-}
-
-.lt-spacer { flex: 1; }
-
-/* A tab row that sits directly in the page column lines up with the grids
-   below it, whose items are inset 8px the way YouTube's are. Rows nested in a
-   view's own block (Subscriptions, History) are already aligned by that block. */
-#localtube-root > .lt-header { padding-inline: 8px; }
-/* margin, not padding: padding would move the text but leave the heading's own
-   box at the column edge, so a measurement of it keeps reporting the old x. */
-#localtube-root > .lt-page-title { margin-inline: 8px; }
+.lt-title-row .lt-page-title { margin-bottom: 8px; }
 
 .lt-status {
   font-size: 12px;
@@ -201,6 +206,7 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 }
 
 .lt-card-body {
+  position: relative;
   display: flex;
   align-items: flex-start;
   padding-top: 12px;
@@ -247,27 +253,78 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
   color: var(--lt-text-dim);
 }
 
-/* The 40x40 slot where YouTube's kebab sits, aligned with the title's top. */
-.lt-card-action {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  top: auto;
-  min-width: 40px;
+/* YouTube's kebab: a 40x40 button, shown on hover, in the top-right of the
+   metadata block. The title reserves 24px so a two-line title never runs under
+   it. */
+.lt-kebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
   height: 40px;
   border: none;
-  border-radius: 20px;
-  padding: 0 12px;
-  font: 500 12px/1 Roboto, Arial, sans-serif;
+  border-radius: 50%;
+  padding: 0;
   color: var(--lt-text);
-  background: var(--lt-surface);
+  background: transparent;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.lt-card:hover .lt-card-action,
-.lt-card-action:focus-visible { opacity: 1; }
-.lt-card-action:hover { background: var(--lt-surface-hover); }
+.lt-kebab svg { width: 24px; height: 24px; fill: currentColor; }
+.lt-kebab:hover { background: var(--lt-surface-hover); }
+.lt-card:hover .lt-kebab,
+.lt-lockup:hover .lt-kebab,
+.lt-histrow:hover .lt-kebab,
+.lt-kebab:focus-visible { opacity: 1; }
+
+.lt-card .lt-kebab {
+  position: absolute;
+  top: 3px;
+  right: -8px;
+}
+
+/* --------------------------------------------------------------- the menu
+
+   The card menu, shaped like YouTube's: a rounded sheet of 36px rows, each a
+   24px icon and a 14px label, floating above everything on the page. */
+
+.lt-menu {
+  position: fixed;
+  z-index: 2147483000;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 8px 0;
+  border-radius: 12px;
+  background: var(--lt-menu-bg);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.3);
+  color: var(--lt-text);
+}
+
+.lt-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: 400 14px/20px Roboto, Arial, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.lt-menu-item:hover { background: var(--lt-surface); }
+.lt-menu-item svg { width: 24px; height: 24px; flex: none; fill: currentColor; }
+.lt-menu-item span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ------------------------------------------------------ lists and states */
 
@@ -716,6 +773,7 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 }
 
 .lt-lockup-cover {
+  position: relative;
   flex: none;
   width: 200px;
   aspect-ratio: 16 / 9;
@@ -748,21 +806,7 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
   position: absolute;
   top: 0;
   right: 0;
-  min-width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 20px;
-  padding: 0 12px;
-  font: 500 12px/1 Roboto, Arial, sans-serif;
-  color: var(--lt-text);
-  background: transparent;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease;
 }
-.lt-lockup:hover .lt-lockup-action,
-.lt-lockup-action:focus-visible { opacity: 1; }
-.lt-lockup-action:hover { background: var(--lt-surface-hover); }
 
 @media (max-width: 1000px) {
   .lt-pldetail { flex-direction: column; }
@@ -867,23 +911,9 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
   color: var(--lt-text-dim);
 }
 
-.lt-histrow-remove {
-  flex: none;
-  min-width: 40px;
-  height: 26px;
-  border: none;
-  border-radius: 999px;
-  padding: 0 10px;
-  font: 500 12px/1 Roboto, Arial, sans-serif;
-  color: var(--lt-text);
-  background: transparent;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.lt-histrow:hover .lt-histrow-remove,
-.lt-histrow-remove:focus-visible { opacity: 1; }
-.lt-histrow-remove:hover { background: var(--lt-surface-hover); }
+/* YouTube's history kebab hangs 11px above the title's line, so a 40px button
+   centres on a 26px row without pushing the title down. */
+.lt-histrow-remove { margin-top: -7px; }
 
 /* --------------------------------------------------------------- the rail */
 
@@ -1274,3 +1304,52 @@ html[data-localtube-theme='light'] { --lt-guide-divider: rgba(0, 0, 0, 0.2); }
   background: var(--lt-surface);
 }
 
+
+/* -------------------------------------------------------- duration badge */
+
+/* Measured on a live search page (1496px, dark): 20px tall at a 4px radius on
+   rgba(0,0,0,0.6), 1px/4px padding, 500 12px/18px white, inset 8px from the
+   cover's right and bottom edges. Sits above the watched bar, which is why the
+   8px offset matters — YouTube's badge clears its own progress bar. */
+.lt-duration {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  height: 20px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: 500 12px/18px Roboto, Arial, sans-serif;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------ watched progress */
+
+/* The watched bar across the bottom of a cover. Every value below measured on
+   a live signed-in feed (dark, 392px cover).
+
+   YouTube's .ytThumbnailOverlayProgressBarHostWatchedProgressBar is absolutely
+   positioned at bottom 0, the full width of the cover, 4px tall, on an OPAQUE
+   grey — rgb(113,113,113) in dark and rgb(144,144,144) in light, both measured
+   on a live signed-in page, and not the translucent white this first assumed.
+
+   The fill is a gradient, not a flat red: #f03 for its first 80%, fading to
+   rgb(255,39,145) at the tip. It is scaled to the FILL's width, not the
+   cover's, so a barely-watched video shows a short bar that is almost all red
+   with a pink tip — which is why a flat red looked right in a mockup and wrong
+   beside the real thing. */
+.lt-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--lt-progress-track);
+  pointer-events: none;
+}
+.lt-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgb(255, 0, 51) 80%, rgb(255, 39, 145));
+}

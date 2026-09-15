@@ -2,7 +2,14 @@
 // Google account and has no effect on YouTube's recommendations. It is only a
 // list of channel ids this browser builds its feed from.
 
-import { fetchChannelTitle } from '@/lib/feed';
+import { fetchChannelTitle, pool } from '@/lib/feed';
+import {
+  channelViaInnertube,
+  InnertubeRateLimited,
+  innertubeAvailable,
+} from '@/lib/innertube';
+import { channelFromVideo } from '@/lib/oembed';
+import type { FeedCache } from '@/types';
 import { getData, updateData } from '@/lib/store';
 import type { Subscription } from '@/types';
 
@@ -20,11 +27,17 @@ export async function isSubscribed(channelId: string): Promise<boolean> {
 
 /** Add a channel. Re-subscribing refreshes the title/avatar but keeps
  *  `addedAt`, so the list does not reshuffle. */
-export async function subscribe(channel: {
+/** What a page can tell us about a channel. Everything past the id is optional
+ *  because different pages expose different amounts. */
+export interface ChannelDetails {
   id: string;
   title: string;
   avatar?: string;
-}): Promise<void> {
+  handle?: string;
+  subscribers?: string;
+}
+
+export async function subscribe(channel: ChannelDetails): Promise<void> {
   await updateData((data) => {
     const existing = data.subscriptions[channel.id];
     data.subscriptions[channel.id] = {
@@ -32,7 +45,31 @@ export async function subscribe(channel: {
       title: channel.title || existing?.title || channel.id,
       avatar: channel.avatar ?? existing?.avatar,
       addedAt: existing?.addedAt ?? Date.now(),
+      handle: channel.handle ?? existing?.handle,
+      subscribers: channel.subscribers ?? existing?.subscribers,
+      detailsAt: channel.handle || channel.subscribers ? Date.now() : existing?.detailsAt,
     };
+  });
+}
+
+/**
+ * Fill in what a page happens to know about a channel you already follow.
+ *
+ * The handle and subscriber count come only from YouTube's own page data, so a
+ * channel followed before this existed — or imported from a Takeout file, which
+ * carries neither — has neither until you next visit it. This is a no-op for
+ * anyone not followed: LocalTube keeps no record of channels you did not ask
+ * for.
+ */
+export async function noteChannelDetails(channel: ChannelDetails): Promise<void> {
+  if (!channel.handle && !channel.subscribers && !channel.avatar) return;
+  await updateData((data) => {
+    const existing = data.subscriptions[channel.id];
+    if (!existing) return;
+    existing.handle = channel.handle ?? existing.handle;
+    existing.subscribers = channel.subscribers ?? existing.subscribers;
+    existing.avatar = channel.avatar ?? existing.avatar;
+    if (channel.handle || channel.subscribers) existing.detailsAt = Date.now();
   });
 }
 
@@ -43,11 +80,7 @@ export async function unsubscribe(channelId: string): Promise<void> {
 }
 
 /** Returns the resulting state, so callers can update a button label. */
-export async function toggleSubscription(channel: {
-  id: string;
-  title: string;
-  avatar?: string;
-}): Promise<boolean> {
+export async function toggleSubscription(channel: ChannelDetails): Promise<boolean> {
   if (await isSubscribed(channel.id)) {
     await unsubscribe(channel.id);
     return false;
@@ -112,4 +145,154 @@ export async function addMany(channels: { id: string; title: string }[]): Promis
     }
     return added;
   });
+}
+
+
+/**
+ * Fill in the @handle of every followed channel that has none.
+ *
+ * Runs off the feed cache: identifying a channel through oEmbed means naming
+ * one of its videos, and the cache already holds them. A channel with nothing
+ * cached is skipped rather than fetched for — its feed will arrive on its own,
+ * and this can pick it up next time.
+ *
+ * One small request per channel, at the same concurrency as the feed, and only
+ * ever for channels that are missing a handle: once found, a handle is kept and
+ * never asked for again. Reports how many were learned so the caller can patch
+ * them into a page already on screen.
+ */
+export async function backfillHandles(
+  cache: FeedCache,
+  onFound?: (channelId: string, handle: string) => void,
+): Promise<number> {
+  const { subscriptions } = await getData();
+  const missing = Object.values(subscriptions).filter(
+    (channel) => !channel.handle && (cache[channel.id]?.videos.length ?? 0) > 0,
+  );
+  if (missing.length === 0) return 0;
+
+  let found = 0;
+  await pool(missing, async (channel) => {
+    // Try a few of the channel's videos, not only its newest: oEmbed 404s on a
+    // deleted or private video, and one of those at the top of a feed would
+    // otherwise keep the whole channel from ever resolving.
+    let result = null;
+    for (const video of cache[channel.id].videos.slice(0, 3)) {
+      result = await channelFromVideo(video.id);
+      if (result?.handle) break;
+    }
+    if (!result?.handle) return;
+    found++;
+    await noteChannelDetails({
+      id: channel.id,
+      // Prefer the name we already show; oEmbed's is a fallback for a channel
+      // still stored under its raw id.
+      title: isPlaceholderTitle(channel) ? (result.title ?? channel.title) : channel.title,
+      handle: result.handle,
+    });
+    onFound?.(channel.id, result.handle);
+  });
+  return found;
+}
+
+/**
+ * Note channels the page's own cards taught us about, in one storage write.
+ *
+ * The MAIN-world bridge publishes the id, avatar and handle from every video
+ * card YouTube renders; this is the filter that applies the standing rule —
+ * it keeps a card's channel only if you already follow it, and only writes
+ * when there is actually something new to keep. Both guards matter: cards
+ * arrive in a steady trickle as you browse, and a write per trickle would
+ * re-render every view per card.
+ */
+export async function noteHarvestedChannels(
+  cards: { id: string; avatar?: string; handle?: string }[],
+): Promise<void> {
+  for (const card of cards) {
+    const { subscriptions } = await getData();
+    const existing = subscriptions[card.id];
+    if (!existing) continue;
+    if ((!card.avatar || existing.avatar) && (!card.handle || existing.handle)) continue;
+    await updateData((data) => {
+      const subscription = data.subscriptions[card.id];
+      if (!subscription) return; // unfollowed while the read was in flight
+      if (card.avatar && !subscription.avatar) subscription.avatar = card.avatar;
+      if (card.handle && !subscription.handle) {
+        subscription.handle = card.handle;
+        subscription.detailsAt = Date.now();
+      }
+    });
+  }
+}
+
+/** Channels already asked for this session, so a deleted one is not re-asked
+ *  on every pass. */
+const avatarAttempted = new Set<string>();
+
+/** Circuit breaker: once Innertube answers 429, stop asking for a while —
+ *  the initials just stay initials, which is infinitely better than feeding
+ *  the rate limiter. */
+let avatarBackoffUntil = 0;
+const AVATAR_BACKOFF_MS = 15 * 60_000;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Fill in the avatar of every followed channel that has none.
+ *
+ * Exists for Takeout imports: the CSV has id and title and nothing else, so
+ * an imported list renders as bare initials. One Innertube browse call per
+ * channel fills avatar, handle and subscriber count at once (see
+ * lib/innertube.ts for why this endpoint), and only ever for channels missing
+ * an avatar: once stored, an avatar is kept and never asked for again.
+ * Reports each find so the caller can patch it into a page already on screen.
+ *
+ * Deliberately low-key: two workers with a short pause between calls. The
+ * endpoint itself is cheap, but cadence is what rate limiters read — and a
+ * previous version of this feature fetched full channel pages at pool
+ * concurrency and got the answer 429 → a google.com/sorry redirect that
+ * CORS-blocked the entire batch (observed live).
+ */
+export async function backfillAvatars(
+  onFound?: (channelId: string, avatar: string) => void,
+): Promise<number> {
+  if (!innertubeAvailable() || Date.now() < avatarBackoffUntil) return 0;
+  const { subscriptions } = await getData();
+  const missing = Object.values(subscriptions).filter(
+    (channel) => !channel.avatar && !avatarAttempted.has(channel.id),
+  );
+  if (missing.length === 0) return 0;
+
+  let found = 0;
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < missing.length && Date.now() >= avatarBackoffUntil) {
+      const channel = missing[cursor++];
+      avatarAttempted.add(channel.id);
+      const details = await channelViaInnertube(channel.id);
+      if (details?.avatar) {
+        found++;
+        await noteChannelDetails({
+          id: channel.id,
+          title: channel.title,
+          avatar: details.avatar,
+          handle: details.handle,
+          subscribers: details.subscribers,
+        });
+        onFound?.(channel.id, details.avatar);
+      }
+      if (cursor < missing.length) await sleep(200 + Math.random() * 300);
+    }
+  };
+  try {
+    await Promise.all([worker(), worker()]);
+  } catch (error) {
+    if (error instanceof InnertubeRateLimited) {
+      avatarBackoffUntil = Date.now() + AVATAR_BACKOFF_MS;
+      console.warn('[LocalTube] avatar backfill paused — Innertube rate-limited');
+      return found;
+    }
+    throw error;
+  }
+  return found;
 }

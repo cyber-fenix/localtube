@@ -49,14 +49,23 @@ export async function recordWatch(video: Video): Promise<boolean> {
   });
 }
 
+/**
+ * Forget a watch — and where you had got to in it.
+ *
+ * Removing something from history and then being resumed into the middle of it
+ * would make the removal look broken, so the resume position goes with it.
+ */
 export async function removeFromHistory(videoId: string): Promise<void> {
   await updateData((data) => {
     data.history = data.history.filter((entry) => entry.id !== videoId);
+    delete data.progress[videoId];
   });
 }
 
+/** Same bargain as above, applied to the whole list. */
 export async function clearHistory(): Promise<void> {
   await updateData((data) => {
     data.history = [];
+    data.progress = {};
   });
 }

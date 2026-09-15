@@ -14,11 +14,16 @@ import {
   onNavigate,
   stopNavigationWatch,
 } from '@/content/youtube-dom';
+import { onAccountChange } from '@/content/account';
+import { watchCardChannelHarvest } from '@/content/avatar-harvest';
+import { syncAccountBar } from '@/content/account-bar';
 import { renderHome, unmountHome } from '@/content/home';
 import { AVATAR_ID, closeMenu, mountMasthead } from '@/content/masthead';
 import { CHANNELS_ID, SECTION_ID, mountNavRail, renderGuideChannels } from '@/content/nav-rail';
 import { syncNativeSkin } from '@/content/native-skin';
+import { harvestChannelVideos, watchForHarvest } from '@/content/harvest';
 import { mountHistory } from '@/content/history';
+import { mountProgress } from '@/content/progress';
 import { mountQueue } from '@/content/queue';
 import { mountSubscribeButton } from '@/content/subscribe-button';
 import {
@@ -27,6 +32,7 @@ import {
   watchForSubscribeHosts,
 } from '@/content/subscribe-anywhere';
 import { ROW_ID, closePopover, mountVideoActions } from '@/content/video-actions';
+import { closeCardMenu } from '@/ui/menu';
 import { nativeSkinOn } from '@/content/native-skin';
 import { syncTheme, watchTheme } from '@/content/theme';
 import { VIEW_CHANGED } from '@/ui/views';
@@ -38,6 +44,8 @@ async function route(): Promise<void> {
   // Must settle before the mounts: they style themselves according to whether
   // YouTube's own controls are hidden.
   await syncNativeSkin();
+  // Same clock, so the bar and the gates can never disagree within a route.
+  syncAccountBar();
 
   if (isFeedRoute(currentRoute())) void renderHome();
   else unmountHome();
@@ -53,6 +61,8 @@ async function route(): Promise<void> {
     mountVideoActions(),
     mountQueue(),
     mountHistory(),
+    mountProgress(),
+    harvestChannelVideos().then(() => undefined),
   ]);
 }
 
@@ -67,11 +77,20 @@ async function route(): Promise<void> {
  */
 function teardown(): void {
   stopNavigationWatch();
-  for (const el of Array.from(document.querySelectorAll('[id^="localtube-"], .lt-follow-anywhere')))
+  // Two families: nodes keyed by a localtube- id, and cloned guide entries that
+  // carry no id at all — a classname and the section rules beside them. The
+  // clones are easy to forget here, and a missed one is a zombie: it keeps the
+  // OLD script's styling and listeners alive in a tab the new script never
+  // sees, so an extension reload looks like "nothing changed" until the tab is
+  // reloaded.
+  for (const el of Array.from(
+    document.querySelectorAll('[id^="localtube-"], .lt-follow-anywhere, .localtube-guide-entry, .lt-guide-rule'),
+  ))
     el.remove();
   for (const el of Array.from(document.querySelectorAll('.localtube-active')))
     el.classList.remove('localtube-active');
   delete document.documentElement.dataset.localtubeNative;
+  delete document.documentElement.dataset.localtubeBar;
   console.info('[LocalTube] extension reloaded — reload this tab to use the new version');
 }
 
@@ -104,6 +123,7 @@ function closeOverlays(): void {
   closeChannelsPopover();
   closePopover();
   closeMenu();
+  closeCardMenu();
 }
 
 /**
@@ -144,6 +164,8 @@ function watchForMissingControls(): void {
 
 watchTheme();
 watchForSubscribeHosts();
+watchForHarvest();
+watchCardChannelHarvest();
 watchForMissingControls();
 run();
 onNavigate(() => {
@@ -155,6 +177,11 @@ window.addEventListener(VIEW_CHANGED, closeOverlays);
 // An edit made in the popup (or another tab) should be reflected here without a
 // reload — a follow removed in the popup must not leave a stale "Following".
 onDataChanged(() => run());
+
+// Signing in or out flips read-only mode without a reload: the whole route
+// re-runs, so the skin lifts, the write controls come down (or come back), and
+// history/progress recording stands down (or resumes).
+onAccountChange(() => run());
 
 // Diagnostics for selector drift; see src/content/youtube-dom.ts.
 (window as unknown as { __ltDiag: () => unknown }).__ltDiag = diag;

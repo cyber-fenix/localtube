@@ -12,6 +12,7 @@
 // followed the first author.
 
 import { generation } from '@/content/youtube-dom';
+import { writesAllowed } from '@/content/account';
 import type { Subscription } from '@/types';
 import { nativeSkinOn } from '@/content/native-skin';
 import { flashToast } from '@/content/toast';
@@ -166,6 +167,14 @@ function paint(button: HTMLButtonElement, following: boolean, native: boolean): 
 }
 
 export async function mountSubscribeEverywhere(): Promise<void> {
+  // Follow is a write: signed in, YouTube's real Subscribe owns the page, and a
+  // mid-session sign-in must take existing buttons down, not just stop new ones.
+  if (!writesAllowed()) {
+    for (const button of Array.from(document.querySelectorAll(`.${CLASS}`))) button.remove();
+    closeChannelsPopover();
+    return;
+  }
+
   const hosts = Array.from(document.querySelectorAll<HTMLElement>('[data-localtube-cid]'));
   if (hosts.length === 0) return;
 

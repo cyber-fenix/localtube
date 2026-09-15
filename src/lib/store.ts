@@ -8,7 +8,12 @@
 
 import type { FeedCache, LocalTubeData, Playlist, Settings, SystemPlaylist } from '@/types';
 
-export const SCHEMA_VERSION = 1;
+/**
+ * 2 added `progress` (resume positions) and the `resumePlayback` setting.
+ * Both are additive, but the bump is what stops a v2 backup being restored by
+ * an older build that would silently drop them.
+ */
+export const SCHEMA_VERSION = 2;
 
 /**
  * Thrown when the extension has been reloaded, updated or disabled while this
@@ -53,11 +58,16 @@ export const DEFAULT_SETTINGS: Settings = {
   replaceHome: true,
   nativeSkin: true,
   recordHistory: true,
+  resumePlayback: true,
 };
 
 /** How many watched videos History keeps. Old entries fall off the end rather
  *  than growing chrome.storage.local without bound. */
 export const HISTORY_LIMIT = 500;
+
+/** How many resume positions are kept. Far cheaper per entry than a history
+ *  row — three numbers — so it can hold more of them. */
+export const PROGRESS_LIMIT = 1000;
 
 /** Fixed playlists, created on first read so the rest of the code can assume
  *  they exist. Their ids are stable so backups restore onto them cleanly. */
@@ -76,6 +86,7 @@ function emptyData(): LocalTubeData {
     subscriptions: {},
     playlists: {},
     history: [],
+    progress: {},
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -105,6 +116,9 @@ export async function getData(): Promise<LocalTubeData> {
     // Explicit rather than left to the spread: a store written by a build that
     // predates History has no such key, and `undefined` would win over [].
     history: saved?.history ?? [],
+    // Same reason as `history` above: a store written before resume existed has
+    // no such key, and `undefined` would win over the default in the spread.
+    progress: saved?.progress ?? {},
     settings: { ...DEFAULT_SETTINGS, ...(saved?.settings ?? {}) },
   };
   if (ensureSystemPlaylists(data)) await storage(() => chrome.storage.local.set({ [DATA_KEY]: data }));
@@ -166,7 +180,20 @@ export async function putFeedCache(patch: FeedCache, keepChannelIds: string[]): 
   const merged = { ...(await getFeedCache()), ...patch };
   const keep = new Set(keepChannelIds);
   for (const id of Object.keys(merged)) if (!keep.has(id)) delete merged[id];
-  await storage(() => chrome.storage.local.set({ [CACHE_KEY]: merged }));
+
+  try {
+    await storage(() => chrome.storage.local.set({ [CACHE_KEY]: merged }));
+  } catch (error) {
+    if (error instanceof ContextInvalidated) throw error;
+    // Out of room. The cache is derived data — it rebuilds itself from the
+    // feeds — so trimming it is always safe, and far better than an unwritable
+    // cache that fails silently from here on. Keeps each channel's newest 15,
+    // which is what the Atom feed alone would have given.
+    for (const id of Object.keys(merged))
+      merged[id] = { ...merged[id], videos: merged[id].videos.slice(0, 15) };
+    await storage(() => chrome.storage.local.set({ [CACHE_KEY]: merged }));
+    console.warn('[LocalTube] feed cache trimmed: chrome.storage.local is full');
+  }
 }
 
 export async function clearFeedCache(): Promise<void> {

@@ -5,8 +5,10 @@
 // recommendations. The tooltips say so.
 
 import { anchor, currentRoute, currentVideoId, generation, waitForAnchor } from '@/content/youtube-dom';
+import { writesAllowed } from '@/content/account';
 import { nativeSkinOn } from '@/content/native-skin';
 import { readContext, waitForVideoContext } from '@/content/page-context';
+import { noteChannelDetails } from '@/lib/subscriptions';
 import { singleFlight } from '@/content/single-flight';
 import { flashToast } from '@/content/toast';
 import {
@@ -162,7 +164,11 @@ document.addEventListener('keydown', (event) => {
 export const mountVideoActions = singleFlight(mountVideoActionsOnce);
 
 async function mountVideoActionsOnce(): Promise<void> {
-  if (currentRoute() !== 'watch') {
+  // Like, Dislike and Save are all writes. Signed in, YouTube's own row is real
+  // and ours must come down — including one that's already mounted, when the
+  // account state flips mid-session.
+  if (currentRoute() !== 'watch' || !writesAllowed()) {
+    document.getElementById(ROW_ID)?.remove();
     closePopover();
     return;
   }
@@ -203,6 +209,19 @@ async function mountVideoActionsOnce(): Promise<void> {
     if (context.channelTitle) video.channelTitle = context.channelTitle;
     if (context.published) video.published = context.published;
     if (context.thumbnail) video.thumbnail = context.thumbnail;
+    if (context.duration) video.duration = context.duration;
+
+    // The watch page is where a channel's @handle and subscriber count are
+    // knowable at all; the feed carries neither. A no-op unless you already
+    // follow this channel.
+    if (context.channelId)
+      void noteChannelDetails({
+        id: context.channelId,
+        title: context.channelTitle ?? context.channelId,
+        avatar: context.avatar,
+        handle: context.handle,
+        subscribers: context.subscribers,
+      }).catch(() => undefined);
   });
 
   const native = nativeSkinOn();

@@ -10,6 +10,7 @@
 //    so clicking through a row of suggestions leaves one entry, not six.
 
 import { anchor, currentRoute, currentVideoId } from '@/content/youtube-dom';
+import { writesAllowed } from '@/content/account';
 import { waitForVideoContext } from '@/content/page-context';
 import { historyEnabled, recordWatch } from '@/lib/history';
 import type { Video } from '@/types';
@@ -48,7 +49,10 @@ function playedEnough(videoId: string): Promise<boolean> {
 }
 
 export async function mountHistory(): Promise<void> {
-  if (currentRoute() !== 'watch') {
+  // Recording history is a write: signed in, YouTube's own history is in charge
+  // and this one stands down entirely — no tracking, so nothing late-bound can
+  // fire after the account flips.
+  if (currentRoute() !== 'watch' || !writesAllowed()) {
     tracking = null;
     return;
   }
@@ -85,9 +89,18 @@ export async function mountHistory(): Promise<void> {
     // Falls back to the URL YouTube derives from the video id, which is right
     // by construction — never to whatever the bridge last published.
     thumbnail: context?.thumbnail ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    // The one place a duration is ever available to LocalTube: the channel feed
+    // carries none, so a video gets its badge by being watched.
+    duration: context?.duration,
   };
 
   if (!(await playedEnough(videoId))) {
+    tracking = null;
+    return;
+  }
+  // Ten seconds of playback is long enough to sign in during: check again at
+  // the write, not only at mount.
+  if (!writesAllowed()) {
     tracking = null;
     return;
   }

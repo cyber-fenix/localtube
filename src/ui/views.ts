@@ -1,15 +1,28 @@
 // The LocalTube views. They render into a container the content script
 // mounts inside YouTube's home page; nothing here knows about YouTube's DOM.
 
+import { writesAllowed } from '@/content/account';
 import { loadFeed, type FeedStatus } from '@/lib/feed';
 import { deletePlaylist, getPlaylist, listPlaylists, removeFromPlaylist, renamePlaylist, createPlaylist } from '@/lib/playlists';
+import { listProgress, watchedFraction } from '@/lib/progress';
 import { clearHistory, historyEnabled, listHistory, removeFromHistory, setHistoryEnabled } from '@/lib/history';
 import { HISTORY_LIMIT, getData, getFeedCache } from '@/lib/store';
-import { isPlaceholderTitle, listSubscriptions, resolveAllTitles, unsubscribe } from '@/lib/subscriptions';
-import { emptyState, formatViews, timeAgo, videoGrid } from '@/ui/cards';
+import {
+  backfillAvatars,
+  backfillHandles,
+  isPlaceholderTitle,
+  listSubscriptions,
+  resolveAllTitles,
+  unsubscribe,
+} from '@/lib/subscriptions';
+import {
+  durationBadge,
+  progressBar,
+  progressFor,
+  watchHref, emptyState, formatViews, kebab, timeAgo, videoGrid } from '@/ui/cards';
 import { PATHS, icon } from '@/ui/icons';
 import { clearShuffle, shuffled, writeShuffle } from '@/lib/shuffle';
-import type { HistoryEntry, Playlist, Video } from '@/types';
+import type { HistoryEntry, Playlist, ProgressEntry, Video } from '@/types';
 
 export type View =
   | { name: 'feed' }
@@ -63,37 +76,6 @@ export function go(view: View): void {
 /** Fired when LocalTube changes its own view; src/content/home.ts listens. */
 export const VIEW_CHANGED = 'localtube:view';
 
-function header(active: View['name'], extra?: HTMLElement[]): HTMLElement {
-  const bar = document.createElement('div');
-  bar.className = 'lt-header';
-
-  const tabs: [View, string][] = [
-    [{ name: 'feed' }, 'Feed'],
-    [{ name: 'subscriptions' }, 'Subscriptions'],
-    [{ name: 'playlists' }, 'Playlists'],
-    [{ name: 'history' }, 'History'],
-  ];
-  for (const [view, label] of tabs) {
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.className = 'lt-tab';
-    tab.textContent = label;
-    // A playlist detail page — including Watch Later and Liked — is "inside"
-    // Playlists, so keep that tab lit.
-    const inPlaylists = active === 'playlist' || active === 'watch-later' || active === 'liked';
-    const isActive = view.name === active || (inPlaylists && view.name === 'playlists');
-    tab.setAttribute('aria-selected', String(isActive));
-    tab.addEventListener('click', () => go(view));
-    bar.appendChild(tab);
-  }
-
-  const spacer = document.createElement('div');
-  spacer.className = 'lt-spacer';
-  bar.appendChild(spacer);
-  if (extra) bar.append(...extra);
-  return bar;
-}
-
 function localOnlyNote(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'lt-note';
@@ -107,8 +89,9 @@ function localOnlyNote(): HTMLElement {
 export async function feedView(root: HTMLElement, token: () => boolean): Promise<void> {
   // The avatar YouTube shows beside each title. We have one only for channels
   // you follow — which, on a feed built from your follows, is all of them.
-  const { subscriptions } = await getData();
+  const [{ subscriptions }, progress] = await Promise.all([getData(), listProgress()]);
   const avatarFor = (video: Video): string | undefined => subscriptions[video.channelId]?.avatar;
+  const watched = progressFor(progress);
 
   const status = document.createElement('span');
   status.className = 'lt-status';
@@ -122,7 +105,9 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
   // an empty body first and filling it after the await left the page visibly
   // blank for three storage round-trips on every switch to this tab.
   const body = document.createElement('div');
-  const bar = header('feed', [status, refresh]);
+  const bar = document.createElement('div');
+  bar.className = 'lt-actions';
+  bar.append(status, refresh);
   const note = localOnlyNote();
   let attached = false;
   const attach = (): void => {
@@ -155,7 +140,10 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
       return;
     }
 
-    const grid = videoGrid(videos.slice(0, shown), undefined, { avatar: avatarFor });
+    const grid = videoGrid(videos.slice(0, shown), undefined, {
+      avatar: avatarFor,
+      progress: watched,
+    });
     body.replaceChildren(grid);
     if (videos.length > shown) {
       const more = document.createElement('button');
@@ -201,6 +189,7 @@ const CHIP_CHEVRON = 'M18.707 8.793a1 1 0 00-1.414 0L12 14.086 6.707 8.793a1 1 0
 
 export async function subscriptionsView(root: HTMLElement, rerender: () => void): Promise<void> {
   const [subscriptions, cache] = await Promise.all([listSubscriptions(), getFeedCache()]);
+  const writable = writesAllowed();
 
   const ordered = subscriptions.slice().sort((a, b) => {
     if (channelSort === 'name') return a.title.localeCompare(b.title);
@@ -225,13 +214,15 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
   // and the follow control in a block on the right. Rows are 136 tall with
   // 16px between them and no rule.
   //
-  // YouTube's metadata reads "@handle • 2.7M subscribers". LocalTube has
-  // neither — both come from YouTube's API and the public channel feed carries
-  // no trace of either — so the line says what is actually known instead of
-  // inventing figures.
+  // YouTube's metadata reads "@handle • 2.7M subscribers". The channel FEED
+  // carries neither, but YouTube's own page data does, so LocalTube captures
+  // both whenever you visit a channel or watch one of its videos. Until that
+  // happens — a channel imported from Takeout and never opened — the line falls
+  // back to what the feed does know rather than inventing figures.
   for (const channel of ordered) {
     const row = document.createElement('div');
     row.className = 'lt-channel';
+    row.dataset.channelId = channel.id;
 
     const initial = channel.title.trim().charAt(0).toUpperCase() || '?';
     const avatarLink = document.createElement('a');
@@ -265,7 +256,10 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     const meta = document.createElement('div');
     meta.className = 'lt-channel-meta';
     const entry = cache[channel.id];
-    if (entry?.error) {
+    const known = [channel.handle, channel.subscribers].filter(Boolean).join(' • ');
+    if (known) {
+      meta.textContent = known;
+    } else if (entry?.error) {
       meta.classList.add('lt-row-warn');
       meta.textContent = `Feed unavailable (${entry.error}) — the channel may have been deleted`;
     } else if (entry && entry.videos.length > 0) {
@@ -275,28 +269,45 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
       meta.textContent = entry ? 'No recent uploads' : 'Not loaded yet';
     }
 
+    // With the handle line above taking the metadata slot, the feed status
+    // moves down to where YouTube puts the channel description.
     const followedOn = document.createElement('div');
     followedOn.className = 'lt-channel-desc';
-    followedOn.textContent = `Followed ${timeAgo(new Date(channel.addedAt).toISOString())}`;
+    const feedNote = entry?.error
+      ? `Feed unavailable (${entry.error}) — the channel may have been deleted`
+      : entry && entry.videos.length > 0
+        ? `${entry.videos.length} recent videos • latest ${timeAgo(entry.videos[0].published)}`
+        : entry
+          ? 'No recent uploads'
+          : 'Not loaded yet';
+    followedOn.textContent = known
+      ? `${feedNote} • followed ${timeAgo(new Date(channel.addedAt).toISOString())}`
+      : `Followed ${timeAgo(new Date(channel.addedAt).toISOString())}`;
+    if (known && entry?.error) followedOn.classList.add('lt-row-warn');
 
     info.append(name, meta, followedOn);
 
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'lt-channel-btn lt-accent';
-    remove.setAttribute('aria-pressed', 'true');
-    remove.textContent = 'Subscribed';
-    remove.title = 'Following in LocalTube — click to unfollow';
-    remove.addEventListener('click', async () => {
-      await unsubscribe(channel.id);
-      rerender();
-    });
+    // Unfollowing is a write: read-only mode leaves the row itself, which is
+    // a fact about local data, but not the control that changes it.
+    if (writable) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'lt-channel-btn lt-accent';
+      remove.setAttribute('aria-pressed', 'true');
+      remove.textContent = 'Subscribed';
+      remove.title = 'Following in LocalTube — click to unfollow';
+      remove.addEventListener('click', async () => {
+        await unsubscribe(channel.id);
+        rerender();
+      });
 
-    const buttons = document.createElement('div');
-    buttons.className = 'lt-channel-buttons';
-    buttons.appendChild(remove);
-
-    row.append(avatarLink, info, buttons);
+      const buttons = document.createElement('div');
+      buttons.className = 'lt-channel-buttons';
+      buttons.appendChild(remove);
+      row.append(avatarLink, info, buttons);
+    } else {
+      row.append(avatarLink, info);
+    }
     body.appendChild(row);
   }
 
@@ -323,7 +334,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
 
   const page = document.createElement('div');
   page.className = 'lt-subs-page';
-  page.append(header('subscriptions'), heading, chips, body, localOnlyNote());
+  page.append(heading, chips, body, localOnlyNote());
 
   root.replaceChildren(page);
 
@@ -335,6 +346,53 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
       if (fixed > 0) rerender();
     });
   }
+
+  // Learn the @handle of anything that has none — a channel imported from
+  // Takeout, or followed before LocalTube captured handles at all. One small
+  // oEmbed request each, off the feed cache, and only ever for the ones
+  // missing it.
+  //
+  // Patched into the rows already on screen rather than re-rendering: this
+  // resolves one channel at a time over a second or two, and a full re-render
+  // per answer would make the list jump under the cursor.
+  void backfillHandles(cache, (channelId, handle) => {
+    const row = body.querySelector(`[data-channel-id="${CSS.escape(channelId)}"]`);
+    const line = row?.querySelector('.lt-channel-meta');
+    if (!line || line.textContent?.startsWith('@')) return;
+    const status = line.textContent ?? '';
+    line.textContent = handle;
+    line.classList.remove('lt-row-warn');
+    // The feed status the handle displaced moves down to the description line,
+    // where it sits for every other channel that knows its handle.
+    const desc = row?.querySelector('.lt-channel-desc');
+    if (desc && status) desc.textContent = `${status} • ${(desc.textContent ?? '').replace(/^Followed/, 'followed')}`;
+  }).catch(() => undefined);
+
+  // Learn the avatar of anything that has none — Takeout carries none, and
+  // neither the feed nor oEmbed has one, so an imported list starts as bare
+  // initials. One small Innertube browse call each (channels browsing already
+  // surfaced get theirs for free from the card harvest), patched into the row
+  // when it lands, the same as the handle above.
+  void backfillAvatars((channelId, avatar) => {
+    const row = body.querySelector(`[data-channel-id="${CSS.escape(channelId)}"]`);
+    const slot = row?.querySelector('.lt-channel-avatar');
+    if (!slot || slot.querySelector('img')) return;
+    // The initial the row currently shows, kept so a broken image can fall
+    // back to it exactly as the render path's does.
+    const initial = slot.textContent ?? '?';
+    const img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.width = 136;
+    img.height = 136;
+    img.addEventListener('error', () => {
+      slot.replaceChildren(document.createTextNode(initial));
+      slot.classList.add('lt-channel-avatar-initial');
+    }, { once: true });
+    img.src = avatar;
+    slot.classList.remove('lt-channel-avatar-initial');
+    slot.replaceChildren(img);
+  }).catch(() => undefined);
 }
 
 /* ------------------------------------------------------------ playlists */
@@ -350,26 +408,35 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
 export async function playlistsView(root: HTMLElement, rerender: () => void): Promise<void> {
   const playlists = await listPlaylists();
 
-  const create = document.createElement('button');
-  create.type = 'button';
-  create.className = 'lt-btn lt-btn-primary';
-  create.textContent = 'New playlist';
-  create.addEventListener('click', async () => {
-    const name = prompt('Playlist name');
-    if (name === null) return;
-    await createPlaylist(name);
-    rerender();
-  });
-
   const heading = document.createElement('h1');
   heading.className = 'lt-page-title';
   heading.textContent = 'Playlists';
+
+  // The page's one action sits beside its title rather than in a bar of its own.
+  const titleRow = document.createElement('div');
+  titleRow.className = 'lt-title-row';
+  titleRow.appendChild(heading);
+
+  // Creating a playlist is a write: hidden in read-only mode.
+  if (writesAllowed()) {
+    const create = document.createElement('button');
+    create.type = 'button';
+    create.className = 'lt-btn lt-btn-primary';
+    create.textContent = 'New playlist';
+    create.addEventListener('click', async () => {
+      const name = prompt('Playlist name');
+      if (name === null) return;
+      await createPlaylist(name);
+      rerender();
+    });
+    titleRow.appendChild(create);
+  }
 
   const body = document.createElement('div');
   body.className = 'lt-plgrid';
   for (const playlist of playlists) body.appendChild(playlistCard(playlist, rerender));
 
-  root.replaceChildren(header('playlists', [create]), heading, body, localOnlyNote());
+  root.replaceChildren(titleRow, body, localOnlyNote());
 }
 
 /** YouTube's own 12px playlist glyph, used on the video-count badge. */
@@ -446,8 +513,9 @@ function playlistCard(playlist: Playlist, rerender: () => void): HTMLElement {
   meta.append(title, sub, full);
   card.append(cover, meta);
 
-  // System playlists (Watch Later, Liked) cannot be renamed or deleted.
-  if (!playlist.system) {
+  // System playlists (Watch Later, Liked) cannot be renamed or deleted, and
+  // neither of these is a write the read-only mode allows anyway.
+  if (!playlist.system && writesAllowed()) {
     const actions = document.createElement('div');
     actions.className = 'lt-pl-actions';
 
@@ -490,11 +558,15 @@ function playlistCard(playlist: Playlist, rerender: () => void): HTMLElement {
  * lockup is where it is going, and one row shape for every LocalTube playlist
  * beats matching two.
  */
-function playlistVideoRow(video: Video, onRemove: (video: Video) => void | Promise<void>): HTMLElement {
+function playlistVideoRow(
+  video: Video,
+  onRemove: (video: Video) => void | Promise<void>,
+  watched?: ProgressEntry,
+): HTMLElement {
   const row = document.createElement('div');
   row.className = 'lt-lockup';
 
-  const href = `/watch?v=${encodeURIComponent(video.id)}`;
+  const href = watchHref(video.id, watched);
 
   const cover = document.createElement('a');
   cover.className = 'lt-lockup-cover';
@@ -504,6 +576,10 @@ function playlistVideoRow(video: Video, onRemove: (video: Video) => void | Promi
   img.alt = '';
   img.src = video.thumbnail;
   cover.appendChild(img);
+  const badge = durationBadge(video.duration ?? watched?.duration);
+  if (badge) cover.appendChild(badge);
+  const bar = progressBar(watchedFraction(watched));
+  if (bar) cover.appendChild(bar);
 
   const meta = document.createElement('div');
   meta.className = 'lt-lockup-meta';
@@ -530,18 +606,16 @@ function playlistVideoRow(video: Video, onRemove: (video: Video) => void | Promi
     meta.appendChild(line);
   }
 
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'lt-lockup-action';
-  remove.title = 'Remove from this playlist';
-  remove.setAttribute('aria-label', 'Remove from this playlist');
-  remove.textContent = 'Remove';
-  remove.addEventListener('click', (event) => {
-    event.preventDefault();
-    void onRemove(video);
-  });
+  // Removing from the playlist is a write; the kebab survives as Share.
+  const menu = kebab(
+    video,
+    writesAllowed()
+      ? [{ label: 'Remove from playlist', path: PATHS.trash, onClick: () => void onRemove(video) }]
+      : [],
+  );
+  menu.classList.add('lt-lockup-action');
 
-  row.append(cover, meta, remove);
+  row.append(cover, meta, menu);
   return row;
 }
 
@@ -554,7 +628,6 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
   const playlist = await getPlaylist(id);
   if (!playlist) {
     root.replaceChildren(
-      header('playlists'),
       emptyState('Playlist not found', 'It may have been deleted from another tab.', {
         label: 'Back to playlists',
         onClick: () => go({ name: 'playlists' }),
@@ -642,8 +715,9 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
   inner.append(name, owner, stats, buttons);
 
   // Renaming and deleting live here rather than on a card, now that a playlist
-  // has a page of its own to own them.
-  if (!playlist.system) {
+  // has a page of its own to own them. Both are writes: read-only mode shows
+  // the playlist but not these links.
+  if (!playlist.system && writesAllowed()) {
     const manage = document.createElement('div');
     manage.className = 'lt-plpanel-manage';
 
@@ -688,14 +762,16 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
       emptyState('Nothing saved yet', 'Use the Save button under any video to add it here.'),
     );
   } else {
-    for (const video of playlist.videos) list.appendChild(playlistVideoRow(video, removeVideo));
+    const watched = progressFor(await listProgress());
+    for (const video of playlist.videos)
+      list.appendChild(playlistVideoRow(video, removeVideo, watched(video.id)));
   }
 
   const layout = document.createElement('div');
   layout.className = 'lt-pldetail';
   layout.append(panel, list);
 
-  root.replaceChildren(header('playlist'), layout, localOnlyNote());
+  root.replaceChildren(layout, localOnlyNote());
 }
 
 /* --------------------------------------------------------------- history */
@@ -713,11 +789,15 @@ function dayLabel(watchedAt: number): string {
   });
 }
 
-function historyRow(entry: HistoryEntry, onRemove: (video: Video) => void | Promise<void>): HTMLElement {
+function historyRow(
+  entry: HistoryEntry,
+  onRemove: (video: Video) => void | Promise<void>,
+  watched?: ProgressEntry,
+): HTMLElement {
   const row = document.createElement('div');
   row.className = 'lt-histrow';
 
-  const href = `/watch?v=${encodeURIComponent(entry.id)}`;
+  const href = watchHref(entry.id, watched);
 
   const cover = document.createElement('a');
   cover.className = 'lt-histrow-cover';
@@ -727,6 +807,10 @@ function historyRow(entry: HistoryEntry, onRemove: (video: Video) => void | Prom
   img.alt = '';
   img.src = entry.thumbnail;
   cover.appendChild(img);
+  const badge = durationBadge(entry.duration ?? watched?.duration);
+  if (badge) cover.appendChild(badge);
+  const bar = progressBar(watchedFraction(watched));
+  if (bar) cover.appendChild(bar);
 
   const meta = document.createElement('div');
   meta.className = 'lt-histrow-meta';
@@ -737,22 +821,19 @@ function historyRow(entry: HistoryEntry, onRemove: (video: Video) => void | Prom
   title.title = entry.title;
   title.textContent = entry.title;
 
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'lt-histrow-remove';
-  remove.title = 'Remove from watch history';
-  remove.setAttribute('aria-label', 'Remove from watch history');
-  remove.textContent = 'Remove';
-  remove.addEventListener('click', (event) => {
-    event.preventDefault();
-    void onRemove(entry);
-  });
+  const menu = kebab(
+    entry,
+    writesAllowed()
+      ? [{ label: 'Remove from history', path: PATHS.trash, onClick: () => void onRemove(entry) }]
+      : [],
+  );
+  menu.classList.add('lt-histrow-remove');
 
   // Title and action share one row, the way YouTube's title-wrapper holds the
   // headline and its kebab menu.
   const head = document.createElement('div');
   head.className = 'lt-histrow-head';
-  head.append(title, remove);
+  head.append(title, menu);
 
   // One metadata line, not two: YouTube's row carries a single 18px line, and
   // the day grouping already says roughly when this was.
@@ -786,7 +867,12 @@ function railAction(label: string, path: string, onClick: () => void): HTMLEleme
 }
 
 export async function historyView(root: HTMLElement, rerender: () => void): Promise<void> {
-  const [history, enabled] = await Promise.all([listHistory(), historyEnabled()]);
+  const [history, enabled, progress] = await Promise.all([
+    listHistory(),
+    historyEnabled(),
+    listProgress(),
+  ]);
+  const watched = progressFor(progress);
 
   const title = document.createElement('h1');
   title.className = 'lt-page-title';
@@ -803,25 +889,30 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
   field.setAttribute('aria-label', 'Search watch history');
   search.appendChild(field);
 
-  const clear = railAction('Clear all watch history', PATHS.trash, async () => {
-    if (!confirm('Clear your entire LocalTube watch history? This cannot be undone.')) return;
-    await clearHistory();
-    rerender();
-  });
-  if (history.length === 0) (clear as HTMLButtonElement).disabled = true;
-
-  const pause = railAction(
-    enabled ? 'Pause watch history' : 'Resume watch history',
-    enabled ? PATHS.pause : PATHS.play,
-    async () => {
-      await setHistoryEnabled(!enabled);
-      rerender();
-    },
-  );
-
   const rail = document.createElement('aside');
   rail.className = 'lt-rail';
-  rail.append(search, clear, pause);
+  rail.appendChild(search);
+
+  // Clearing and pausing both change what gets written — read-only mode shows
+  // the history but neither of these controls.
+  if (writesAllowed()) {
+    const clear = railAction('Clear all watch history', PATHS.trash, async () => {
+      if (!confirm('Clear your entire LocalTube watch history? This cannot be undone.')) return;
+      await clearHistory();
+      rerender();
+    });
+    if (history.length === 0) (clear as HTMLButtonElement).disabled = true;
+
+    const pause = railAction(
+      enabled ? 'Pause watch history' : 'Resume watch history',
+      enabled ? PATHS.pause : PATHS.play,
+      async () => {
+        await setHistoryEnabled(!enabled);
+        rerender();
+      },
+    );
+    rail.append(clear, pause);
+  }
 
   const note = document.createElement('p');
   note.className = 'lt-rail-note';
@@ -879,7 +970,7 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
       heading.className = 'lt-hist-day';
       heading.textContent = label;
       rendered.push(heading);
-      for (const entry of entries) rendered.push(historyRow(entry, remove));
+      for (const entry of entries) rendered.push(historyRow(entry, remove, watched(entry.id)));
     }
     list.replaceChildren(...rendered);
   };
@@ -896,7 +987,7 @@ export async function historyView(root: HTMLElement, rerender: () => void): Prom
   // it left them starting 90px to the left of the heading they belong to.
   const page = document.createElement('div');
   page.className = 'lt-hist-page';
-  page.append(header('history', []), title, layout);
+  page.append(title, layout);
 
   root.replaceChildren(page);
 }

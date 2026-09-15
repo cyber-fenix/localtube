@@ -6,15 +6,103 @@
 // pattern Gmail Bulk Extractor uses for Gmail's `ik` token.
 
 const ATTR = 'localtubeChannel'; // -> data-localtube-channel
+const ACCOUNT_ATTR = 'localtubeSignedin'; // -> data-localtube-signedin
+const INNERTUBE_ATTR = 'localtubeInnertube'; // -> data-localtube-innertube
+const CARD_CHANNELS_ATTR = 'localtubeCardChannels'; // -> data-localtube-card-channels
+
+/**
+ * The ytcfg client the isolated world needs to call Innertube itself.
+ *
+ * The key and client version are the page's own, read fresh — never
+ * hardcoded — so they can neither be stale nor look like a bot's. Publishing
+ * them is not a leak: any script on the page can read ytcfg directly.
+ */
+function publishInnertube(): void {
+  const root = document.documentElement;
+  if (!root || root.dataset[INNERTUBE_ATTR]) return;
+  const cfg = (window as any).ytcfg?.data_;
+  if (!cfg?.INNERTUBE_API_KEY || !cfg?.INNERTUBE_CLIENT_VERSION) return;
+  root.dataset[INNERTUBE_ATTR] = JSON.stringify({
+    key: cfg.INNERTUBE_API_KEY,
+    clientName: cfg.INNERTUBE_CLIENT_NAME ?? 'WEB',
+    clientVersion: cfg.INNERTUBE_CLIENT_VERSION,
+    hl: cfg.HL,
+    gl: cfg.GL,
+    visitorData: cfg.VISITOR_DATA,
+  });
+}
+
+/**
+ * Whether a Google account is signed in.
+ *
+ * `ytcfg.LOGGED_IN` is the signal: an explicit boolean, present on every page,
+ * and set before YouTube has finished rendering anything. Measured signed out,
+ * it reads `false`.
+ *
+ * Deliberately NOT `ytInitialData.responseContext.mainAppWebResponseContext
+ * .loggedIn`, the obvious-looking candidate: signed out that field is ABSENT
+ * rather than false, so it cannot tell "signed out" apart from "not loaded
+ * yet" — and getting that backwards would hide the whole extension on a page
+ * that is merely still loading.
+ *
+ * Cookies are deliberately not consulted. SAPISID would answer this too, and
+ * reading it would be a far worse look than asking the page what it already
+ * says about itself.
+ */
+function readSignedIn(): boolean | null {
+  const cfg = (window as any).ytcfg;
+  const flag = cfg?.get?.('LOGGED_IN') ?? cfg?.data_?.LOGGED_IN;
+  if (typeof flag === 'boolean') return flag;
+
+  // DOM fallback, for a page that has rendered but whose config we cannot see.
+  if (document.querySelector('#avatar-btn')) return true;
+  if (document.querySelector('a[href*="accounts.google.com/ServiceLogin"]')) return false;
+  return null;
+}
+
+/**
+ * Keep the published account state current for the life of the tab.
+ *
+ * Signing out happens in another tab, on a page LocalTube never sees, and this
+ * tab is told nothing about it. The post-navigation poll gives up after a few
+ * seconds, and hanging the re-check on DOM mutations was measured to fail: an
+ * idle YouTube page produces none, so a flip went unnoticed indefinitely.
+ *
+ * A slow heartbeat is what actually works. It costs one property read, and
+ * writes the attribute only when the answer changes.
+ */
+function watchAccount(): void {
+  window.setInterval(publishAccount, 5000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) publishAccount();
+  });
+}
+
+function publishAccount(): void {
+  const root = document.documentElement;
+  if (!root) return;
+  const state = readSignedIn();
+  const next = state === null ? undefined : state ? 'yes' : 'no';
+  if (root.dataset[ACCOUNT_ATTR] === next) return;
+  // Left unset while unknown, so the isolated world can tell "not yet" from
+  // "signed out" and choose what to assume.
+  if (state === null) delete root.dataset[ACCOUNT_ATTR];
+  else root.dataset[ACCOUNT_ATTR] = state ? 'yes' : 'no';
+}
 
 interface Bridged {
   videoId?: string;
   videoTitle?: string;
   published?: string;
   thumbnail?: string;
+  /** Video length in seconds, from videoDetails.lengthSeconds. */
+  duration?: number;
   channelId?: string;
   channelTitle?: string;
   avatar?: string;
+  /** `@handle` and subscriber text, which only YouTube's own data carries. */
+  handle?: string;
+  subscribers?: string;
 }
 
 /** Depth-first search for the first object containing `key`. YouTube's response
@@ -60,15 +148,35 @@ function readWatch(): Bridged | null {
 
   const owner = deepFind((window as any).ytInitialData, 'videoOwnerRenderer');
   const microformat = response?.microformat?.playerMicroformatRenderer;
+  // lengthSeconds is the VIDEO's length. Deliberately preferred over the
+  // <video> element's duration, which during a pre-roll is the ad's.
+  const length = Number(details.lengthSeconds);
   return {
     videoId: details.videoId,
     videoTitle: details.title,
     published: microformat?.publishDate ?? undefined,
     thumbnail: biggestThumb(details.thumbnail) ?? `https://i.ytimg.com/vi/${details.videoId}/hqdefault.jpg`,
+    duration: Number.isFinite(length) && length > 0 ? length : undefined,
     channelId: details.channelId,
     channelTitle: details.author,
     avatar: owner ? biggestThumb(owner.thumbnail) : undefined,
+    handle: handleOf(owner),
+    subscribers: textOf(owner?.subscriberCountText)?.trim(),
   };
+}
+
+/**
+ * The owner's `@handle`.
+ *
+ * YouTube writes it as a canonical base URL ("/@MohammedHijab") on the
+ * navigation endpoint. It is the one place a handle appears as data rather
+ * than as a link the DOM happens to render.
+ */
+function handleOf(node: unknown): string | undefined {
+  const base = deepFind(node, 'canonicalBaseUrl');
+  if (typeof base !== 'string') return undefined;
+  const handle = /^\/(@[\w.-]+)$/.exec(base)?.[1];
+  return handle ?? undefined;
 }
 
 /** The channel id the current URL names, from the path or the canonical link.
@@ -88,11 +196,35 @@ function readChannel(): Bridged | null {
   // would put the previous channel's name and follow state on this page.
   const wanted = urlChannelId();
   if (wanted && meta.externalId !== wanted) return null;
+  const header = deepFind((window as any).ytInitialData, 'pageHeaderViewModel');
   return {
     channelId: meta.externalId,
     channelTitle: meta.title,
     avatar: biggestThumb(meta.avatar),
+    handle: typeof meta.vanityChannelUrl === 'string'
+      ? /(@[\w.-]+)$/.exec(meta.vanityChannelUrl)?.[1]
+      : handleOf(header),
+    subscribers: subscriberTextFrom(header),
   };
+}
+
+/**
+ * "2.7M subscribers" from a channel page header.
+ *
+ * The header states its metadata as a row of parts — handle, subscribers,
+ * videos — so the subscriber one has to be recognised by what it says rather
+ * than by its position, which moves.
+ */
+function subscriberTextFrom(header: unknown): string | undefined {
+  const rows = deepFind(header, 'metadataRows');
+  if (!Array.isArray(rows)) return undefined;
+  for (const row of rows) {
+    for (const part of row?.metadataParts ?? []) {
+      const text = textOf(part?.text)?.trim();
+      if (text && /subscriber/i.test(text)) return text;
+    }
+  }
+  return undefined;
 }
 
 function publish(): boolean {
@@ -326,6 +458,201 @@ function stampChannelIds(): void {
   }
 }
 
+/* --------------------------------------------------------- video harvest */
+
+/**
+ * Tag every video card on a channel page with what YouTube already knows.
+ *
+ * The Atom feed LocalTube builds its feed from returns exactly 15 uploads and
+ * carries no duration at all. A channel page has both: more videos, and a
+ * duration on every one. Reading it costs nothing — the data is already in the
+ * page — and it grows as the user scrolls, so a visit to a channel deepens that
+ * channel's feed.
+ *
+ * This is the ONE place LocalTube reads YouTube's own content rather than only
+ * looking for a mount point. It stays defensible because it reads structured
+ * Polymer data rather than scraping rendered text, it happens only on a channel
+ * page, and content/harvest.ts throws away everything for channels you do not
+ * follow.
+ */
+interface StampedVideo {
+  i: string;
+  t?: string;
+  /** Duration as YouTube writes it: "1:50", "1:02:28". */
+  d?: string;
+  /** View count text: "524K". */
+  v?: string;
+  /** Relative publish text: "4mo ago". */
+  p?: string;
+  th?: string;
+}
+
+function fromLockup(lockup: any): StampedVideo | null {
+  if (lockup?.contentType !== 'LOCKUP_CONTENT_TYPE_VIDEO') return null;
+  const id = lockup.contentId;
+  if (typeof id !== 'string' || id.length === 0) return null;
+
+  const thumb = lockup.contentImage?.thumbnailViewModel;
+  const badge = thumb?.overlays?.find((o: any) => o.thumbnailBottomOverlayViewModel)
+    ?.thumbnailBottomOverlayViewModel?.badges?.[0]?.thumbnailBadgeViewModel;
+  const rows: string[] = [];
+  for (const row of lockup.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel
+    ?.metadataRows ?? [])
+    for (const part of row?.metadataParts ?? [])
+      if (typeof part?.text?.content === 'string') rows.push(part.text.content);
+
+  return {
+    i: id,
+    t: lockup.metadata?.lockupMetadataViewModel?.title?.content,
+    d: typeof badge?.text === 'string' ? badge.text : undefined,
+    // "524K views" style figure first, relative date second — the order
+    // YouTube writes them in, and both are recognised by shape downstream.
+    v: rows[0],
+    p: rows[1],
+    th: absoluteUrl(thumb?.image?.sources?.[0]?.url),
+  };
+}
+
+/** The older grid renderer, still used on some channel layouts. */
+function fromGridVideo(data: any): StampedVideo | null {
+  const id = data?.videoId;
+  if (typeof id !== 'string' || id.length === 0) return null;
+  return {
+    i: id,
+    t: textOf(data.title),
+    d: textOf(data.lengthText),
+    v: textOf(data.viewCountText),
+    p: textOf(data.publishedTimeText),
+    th: absoluteUrl(largestThumb(data.thumbnail)),
+  };
+}
+
+const VIDEO_HOSTS = ['ytd-rich-item-renderer', 'ytd-grid-video-renderer', 'ytd-video-renderer'];
+
+function stampVideos(): void {
+  // Channel pages only. Everywhere else this would be reading YouTube's
+  // recommendations, which is not LocalTube's business.
+  if (!/^\/(@|channel\/|c\/|user\/)/.test(location.pathname)) return;
+
+  for (const host of VIDEO_HOSTS) {
+    for (const el of Array.from(document.querySelectorAll(host))) {
+      const data = (el as any).data ?? (el as any).__data?.data;
+      if (!data) continue;
+      if ((el as HTMLElement).dataset.ltVideo && stampedVideoFrom.get(el) === data) continue;
+      const video = data.content?.lockupViewModel
+        ? fromLockup(data.content.lockupViewModel)
+        : fromGridVideo(data);
+      if (!video) continue;
+      stampedVideoFrom.set(el, data);
+      (el as HTMLElement).dataset.ltVideo = JSON.stringify(video);
+    }
+  }
+}
+
+/** Same staleness rule as the channel-id stamps: Polymer reuses elements. */
+const stampedVideoFrom = new WeakMap<Element, unknown>();
+
+/* -------------------------------------------------- card channel harvest */
+
+/**
+ * The id, avatar and @handle of every channel whose video card is on screen.
+ *
+ * This is how a Takeout import's channels get their pictures without a single
+ * request: each card YouTube renders — home grid, search results, up-next —
+ * already carries its channel's avatar in the card's data. Reading it costs
+ * nothing and cannot be rate-limited, because no request ever happens.
+ *
+ * Unlike `stampVideos`, this runs on EVERY page type. The "not LocalTube's
+ * business" rule covers YouTube's recommendations as content; here only the
+ * channel identity rides across, and the isolated world (like
+ * content/harvest.ts) keeps it only for channels the user already follows.
+ *
+ * The map accumulates new finds and republishes the attribute; the isolated
+ * world drains it (reads, then deletes) and feeds storage. Entries are
+ * publish-once — a drained attribute is repopulated only by channels not seen
+ * since the page loaded.
+ */
+interface CardChannel {
+  id: string;
+  a?: string;
+  h?: string;
+}
+
+const cardChannels = new Map<string, CardChannel>();
+const cardChannelsFrom = new WeakMap<Element, unknown>();
+
+/** The byline navigation endpoint: { browseId, canonicalBaseUrl }. In the
+ *  lockup it hangs off the first metadata part's command run; in the older
+ *  videoRenderer, off the byline text run's navigation endpoint. */
+function bylineEndpoint(metadataViewModel: any): any {
+  for (const row of metadataViewModel?.contentMetadataViewModel?.metadataRows ?? []) {
+    for (const part of row?.metadataParts ?? []) {
+      const endpoint =
+        part?.text?.commandRuns?.[0]?.onTap?.innertubeCommand?.browseEndpoint ??
+        part?.text?.runs?.[0]?.navigationEndpoint?.browseEndpoint;
+      if (isChannelId(endpoint?.browseId)) return endpoint;
+    }
+  }
+  return undefined;
+}
+
+function cardChannelOf(data: any): CardChannel | null {
+  // New lockup cards (home grid, channel pages): verified live to carry the
+  // avatar on the metadata's decoratedAvatarViewModel and the id plus handle
+  // on the byline's browse endpoint.
+  const lockup = data?.content?.lockupViewModel;
+  if (lockup) {
+    const vm = lockup.metadata?.lockupMetadataViewModel;
+    const endpoint = bylineEndpoint(vm?.metadata);
+    if (!endpoint) return null;
+    const sources =
+      vm?.image?.decoratedAvatarViewModel?.avatar?.avatarViewModel?.image?.sources;
+    const avatar = Array.isArray(sources) ? sources[sources.length - 1]?.url : undefined;
+    return {
+      id: endpoint.browseId,
+      a: absoluteUrl(avatar),
+      h: handleOf(endpoint),
+    };
+  }
+
+  // Older videoRenderer cards (search results, watch-page up-next) keep the
+  // same facts on the byline text run; the avatar is optional there.
+  const vr = data?.content?.videoRenderer ?? (data?.videoId ? data : null);
+  if (!vr) return null;
+  const run = vr.longBylineText?.runs?.[0] ?? vr.ownerText?.runs?.[0];
+  const endpoint = run?.navigationEndpoint?.browseEndpoint;
+  if (!isChannelId(endpoint?.browseId)) return null;
+  return {
+    id: endpoint.browseId,
+    a: absoluteUrl(
+      largestThumb(
+        vr.channelThumbnailSupportedRenderers?.channelThumbnailWithLinkRenderer?.thumbnail,
+      ),
+    ),
+    h: handleOf(endpoint),
+  };
+}
+
+function stampCardChannels(): void {
+  const root = document.documentElement;
+  if (!root) return;
+  let fresh = false;
+  for (const host of [...VIDEO_HOSTS, 'ytd-compact-video-renderer']) {
+    for (const el of Array.from(document.querySelectorAll(host))) {
+      const data = (el as any).data ?? (el as any).__data?.data;
+      if (!data) continue;
+      if (cardChannelsFrom.get(el) === data) continue;
+      cardChannelsFrom.set(el, data);
+      const channel = cardChannelOf(data);
+      if (!channel || cardChannels.has(channel.id)) continue;
+      cardChannels.set(channel.id, channel);
+      fresh = true;
+    }
+  }
+  if (fresh && cardChannels.size > 0)
+    root.dataset[CARD_CHANNELS_ATTR] = JSON.stringify([...cardChannels.values()]);
+}
+
 /** Re-stamp as YouTube renders more rows (infinite scroll, hover cards). */
 function watchForNewHosts(): void {
   const root = document.documentElement;
@@ -340,7 +667,15 @@ function watchForNewHosts(): void {
     queued = true;
     window.setTimeout(() => {
       queued = false;
+      // Also re-read the account here, not only in the post-navigation poll:
+      // that poll gives up after a few seconds, so signing out in another tab
+      // an hour later would otherwise go unnoticed until the next navigation.
+      // YouTube mutates constantly, and this is one property read.
+      publishAccount();
+      publishInnertube();
       stampChannelIds();
+      stampVideos();
+      stampCardChannels();
     }, 250);
   }).observe(root, { childList: true, subtree: true });
 }
@@ -348,14 +683,23 @@ function watchForNewHosts(): void {
 function publishSoon(): void {
   let attempts = 0;
   publish();
+  publishAccount();
+  publishInnertube();
   stampChannelIds();
+  stampVideos();
+  stampCardChannels();
   const timer = window.setInterval(() => {
+    publishAccount();
+    publishInnertube();
     stampChannelIds();
+    stampVideos();
+    stampCardChannels();
     if (publish() || ++attempts > 25) window.clearInterval(timer);
   }, 200);
 }
 
 publishSoon();
+watchAccount();
 watchForNewHosts();
 window.addEventListener('yt-navigate-finish', publishSoon);
 window.addEventListener('popstate', publishSoon);

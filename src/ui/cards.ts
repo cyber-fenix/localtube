@@ -1,7 +1,98 @@
 // Shared video-card rendering, used by both the feed and the playlist views so
 // the two never drift apart visually.
 
-import type { Video } from '@/types';
+import { PATHS, icon } from '@/ui/icons';
+import { openCardMenu, type MenuItem } from '@/ui/menu';
+import { videoMenuItems } from '@/ui/video-menu';
+import type { ProgressEntry, Video } from '@/types';
+import { resumeAt, watchedFraction } from '@/lib/progress';
+
+/** The kebab button, wired to the shared video menu. */
+export function kebab(video: Video, extra: MenuItem[] = []): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'lt-kebab';
+  button.title = 'More actions';
+  button.setAttribute('aria-label', 'More actions');
+  button.appendChild(icon(PATHS.kebab));
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openCardMenu(button, videoMenuItems(video, button, extra));
+  });
+  return button;
+}
+
+/** `1:01:27` / `9:07`, YouTube's own phrasing: no leading zero on the first
+ *  unit, two digits on everything after it. */
+export function clockDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const whole = Math.round(seconds);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = whole % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/**
+ * The duration badge, bottom right of a cover.
+ *
+ * Measured on a live search page: 20px tall at a 4px radius on
+ * rgba(0,0,0,0.6), 1px/4px padding, 500 12px/18px white, inset 8px from the
+ * cover's right and bottom edges.
+ *
+ * Only videos LocalTube has seen on a watch page have a duration at all — the
+ * channel feed carries none — so unwatched cards simply have no badge rather
+ * than a placeholder.
+ */
+export function durationBadge(seconds?: number): HTMLElement | null {
+  const label = clockDuration(seconds ?? 0);
+  if (!label) return null;
+  const badge = document.createElement('div');
+  badge.className = 'lt-duration';
+  badge.textContent = label;
+  return badge;
+}
+
+/**
+ * The red watched bar across the bottom of a cover.
+ *
+ * Returns null rather than an empty bar for an unwatched video: YouTube shows
+ * nothing at all there, and an always-present grey track would put a line under
+ * every thumbnail in the feed.
+ */
+export function progressBar(fraction: number): HTMLElement | null {
+  if (!(fraction > 0)) return null;
+  const track = document.createElement('div');
+  track.className = 'lt-progress';
+  const fill = document.createElement('div');
+  fill.className = 'lt-progress-fill';
+  fill.style.width = `${Math.min(100, Math.round(fraction * 1000) / 10)}%`;
+  track.appendChild(fill);
+  return track;
+}
+
+/** Bind a progress map to a lookup the card builders can call per video. */
+export function progressFor(
+  progress: Record<string, ProgressEntry>,
+): (videoId: string) => ProgressEntry | undefined {
+  return (videoId) => progress[videoId];
+}
+
+/**
+ * The watch URL for a video, carrying where you stopped.
+ *
+ * Resume rides in `&t=` rather than being seeked once the page is open, because
+ * YouTube applies a start time AFTER any pre-roll. Seeking the <video> element
+ * ourselves lands in the middle of the ad, and the real video then begins at
+ * zero — which is exactly what it did before this.
+ */
+export function watchHref(videoId: string, entry?: ProgressEntry): string {
+  const base = `/watch?v=${encodeURIComponent(videoId)}`;
+  const at = resumeAt(entry);
+  return at === null ? base : `${base}&t=${Math.floor(at)}s`;
+}
 
 export function timeAgo(iso: string): string {
   const ms = Date.now() - Date.parse(iso);
@@ -40,6 +131,8 @@ export interface CardAction {
 export interface GridOptions {
   note?: (video: Video) => string;
   avatar?: (video: Video) => string | undefined;
+  /** Where you stopped, if anywhere. See progressFor(). */
+  progress?: (videoId: string) => ProgressEntry | undefined;
 }
 
 /**
@@ -52,7 +145,8 @@ export function videoCard(video: Video, action?: CardAction, options?: GridOptio
   const card = document.createElement('div');
   card.className = 'lt-card';
 
-  const href = `/watch?v=${encodeURIComponent(video.id)}`;
+  const watched = options?.progress?.(video.id);
+  const href = watchHref(video.id, watched);
 
   const link = document.createElement('a');
   link.className = 'lt-card-link';
@@ -65,6 +159,10 @@ export function videoCard(video: Video, action?: CardAction, options?: GridOptio
   img.src = video.thumbnail;
   img.alt = '';
   thumb.appendChild(img);
+  const badge = durationBadge(video.duration ?? watched?.duration);
+  if (badge) thumb.appendChild(badge);
+  const bar = progressBar(watchedFraction(watched));
+  if (bar) thumb.appendChild(bar);
   link.appendChild(thumb);
 
   const body = document.createElement('div');
@@ -115,23 +213,14 @@ export function videoCard(video: Video, action?: CardAction, options?: GridOptio
     meta.appendChild(line);
   }
 
-  body.append(avatar, meta);
+  // YouTube's kebab, in YouTube's slot: 40x40 at the top right of the metadata.
+  // Anchored to the metadata row rather than the card, so its position does not
+  // depend on the cover's height.
+  const extra: MenuItem[] = action
+    ? [{ label: action.label, path: PATHS.trash, onClick: () => void action.onClick(video) }]
+    : [];
+  body.append(avatar, meta, kebab(video, extra));
   card.append(link, body);
-
-  // Where YouTube's kebab sits: a 40x40 slot at the top right of the metadata.
-  if (action) {
-    const button = document.createElement('button');
-    button.className = 'lt-card-action';
-    button.type = 'button';
-    button.textContent = action.label;
-    button.title = action.title;
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void action.onClick(video);
-    });
-    card.appendChild(button);
-  }
 
   return card;
 }

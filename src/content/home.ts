@@ -6,6 +6,7 @@
 // anything — turning LocalTube off restores the page exactly as it was.
 
 import { anchor, currentRoute, markUrlHandled, waitForAnchor } from '@/content/youtube-dom';
+import { signedIn } from '@/content/account';
 import { flashToast } from '@/content/toast';
 import { systemPlaylistId } from '@/lib/playlists';
 import { getSettings } from '@/lib/store';
@@ -58,8 +59,13 @@ export async function renderHome(): Promise<void> {
   const { replaceHome } = await getSettings();
   const route = currentRoute();
 
-  // No LocalTube view requested and the user has opted out: leave YouTube alone.
-  if (!hashView && !replaceHome) {
+  // No LocalTube view requested: leave YouTube alone when the user has opted
+  // out — and always when signed in, where the home grid and the
+  // /feed/subscriptions page belong to a real account again (LocalTube is
+  // read-only then and stands down, whatever replaceHome says). An explicitly
+  // hash-routed LocalTube view still renders: viewing your own local data is
+  // always allowed. Unknown counts as signed out.
+  if (!hashView && (!replaceHome || signedIn() === true)) {
     unmountHome();
     return;
   }

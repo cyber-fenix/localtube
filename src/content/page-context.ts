@@ -7,9 +7,14 @@ export interface PageContext {
   videoTitle?: string;
   published?: string;
   thumbnail?: string;
+  /** Video length in seconds, from the player response rather than the
+   *  <video> element — during a pre-roll the element reports the ad's. */
+  duration?: number;
   channelId?: string;
   channelTitle?: string;
   avatar?: string;
+  handle?: string;
+  subscribers?: string;
 }
 
 function fromBridge(): PageContext | null {

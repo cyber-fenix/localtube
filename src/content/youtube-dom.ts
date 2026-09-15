@@ -176,6 +176,24 @@ export function currentVideoId(): string | null {
   return new URLSearchParams(location.search).get('v');
 }
 
+/**
+ * True while an ad is playing.
+ *
+ * Load-bearing for anything that reads the player: during a pre-roll the
+ * <video> element reports the AD's currentTime and duration, not the video's.
+ * Recording that stored an ad's position against the real video, then resumed
+ * into the ad — and when the ad finished, the video started from zero.
+ *
+ * YouTube marks the player itself, which is why this asks the player and not
+ * the <video>: `.ad-showing` while an ad plays, `.ad-interrupting` around the
+ * transition.
+ */
+export function adShowing(): boolean {
+  const player = document.getElementById('movie_player');
+  if (!player) return false;
+  return player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting');
+}
+
 /* ---------------------------------------------------------------- navigation */
 
 /**
@@ -286,6 +304,10 @@ export function diag(): Record<string, unknown> {
     videoId: currentVideoId(),
     hash: location.hash,
     nativeSkin: document.documentElement.dataset.localtubeNative ?? null,
+    // 'yes' / 'no' / null while the page has not said yet. Null on a loaded
+    // page means the MAIN world could not read ytcfg — see mainworld/ytdata.ts.
+    signedIn: document.documentElement.dataset.localtubeSignedin ?? null,
+    adShowing: adShowing(),
     anchors,
     hiding,
     channelFromMainWorld: document.documentElement.dataset.localtubeChannel ?? null,

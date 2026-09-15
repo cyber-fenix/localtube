@@ -24,6 +24,43 @@ const POOL_SIZE = 6;
 /** Cap on the merged list held in memory; the view paginates below this. */
 export const MAX_FEED_VIDEOS = 400;
 
+/**
+ * How many videos are kept per channel.
+ *
+ * The Atom feed only ever returns 15, but visiting a channel page harvests
+ * everything YouTube has rendered there (see content/harvest.ts), so a cache
+ * entry can grow well past that. This is what stops a few big channels filling
+ * chrome.storage.local, which has no unlimited quota here by design.
+ */
+export const CHANNEL_VIDEO_LIMIT = 120;
+
+/**
+ * Combine two lists of the same channel's videos, newest first.
+ *
+ * `authoritative` says whether `incoming` should win on the fields both sides
+ * claim. The Atom feed is authoritative: it carries an exact publish date and a
+ * real view count. A channel-page harvest is not — its date is derived from
+ * text like "4mo ago" — but it is the only source of a duration, so a duration
+ * is always taken from whichever side has one.
+ */
+export function mergeVideos(existing: Video[], incoming: Video[], authoritative: boolean): Video[] {
+  const byId = new Map<string, Video>();
+  for (const video of existing) byId.set(video.id, video);
+  for (const video of incoming) {
+    const previous = byId.get(video.id);
+    if (!previous) {
+      byId.set(video.id, video);
+      continue;
+    }
+    const winner = authoritative ? { ...previous, ...video } : { ...video, ...previous };
+    winner.duration = previous.duration ?? video.duration;
+    byId.set(video.id, winner);
+  }
+  return [...byId.values()]
+    .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))
+    .slice(0, CHANNEL_VIDEO_LIMIT);
+}
+
 const feedUrl = (channelId: string): string =>
   `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
 
@@ -96,7 +133,7 @@ export function mergeCache(cache: FeedCache, channelIds: string[]): Video[] {
 }
 
 /** Run `task` over `items` with at most `POOL_SIZE` in flight. */
-async function pool<T>(items: T[], task: (item: T) => Promise<void>): Promise<void> {
+export async function pool<T>(items: T[], task: (item: T) => Promise<void>): Promise<void> {
   let cursor = 0;
   const workers = Array.from({ length: Math.min(POOL_SIZE, items.length) }, async () => {
     while (cursor < items.length) await task(items[cursor++]);
@@ -145,7 +182,12 @@ export async function loadFeed(
 
   await pool(stale, async (channelId) => {
     try {
-      cache[channelId] = { fetchedAt: Date.now(), videos: await fetchChannelFeed(channelId) };
+      // Merged, not replaced: everything harvested from the channel page would
+      // otherwise be thrown away by the next routine refresh.
+      cache[channelId] = {
+        fetchedAt: Date.now(),
+        videos: mergeVideos(cache[channelId]?.videos ?? [], await fetchChannelFeed(channelId), true),
+      };
     } catch (error) {
       // Keep the previous videos; a transient failure should not empty the feed.
       cache[channelId] = {
