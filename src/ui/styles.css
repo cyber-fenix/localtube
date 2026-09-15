@@ -8,8 +8,8 @@
    src/content/theme.ts decides the theme and stamps data-localtube-theme on
    <html>; `html[dark]` is listed alongside it so the colours are right for the
    frame before that script runs. Tokens are defined on :root because the
-   injected controls (.lt-inject, .lt-popover, #localtube-queue, .lt-guide-link)
-   live outside #localtube-root and must see them too. */
+   injected controls (.lt-inject, .lt-popover, #localtube-queue) live outside
+   #localtube-root and must see them too. */
 
 :root {
   --lt-text: #0f0f0f;
@@ -205,11 +205,102 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 }
 .lt-row:hover { background: var(--lt-surface); }
 .lt-row img { width: 36px; height: 36px; border-radius: 50%; }
+.lt-row-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lt-surface);
+}
+.lt-row-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lt-row-avatar-initial { font: 500 15px/1 Roboto, Arial, sans-serif; color: var(--lt-text); }
 .lt-row-main { flex: 1; min-width: 0; }
 .lt-row-title { font-size: 14px; font-weight: 500; }
 .lt-row-sub { font-size: 12px; color: var(--lt-text-dim); }
 .lt-row a { color: inherit; text-decoration: none; }
 .lt-row-warn { color: var(--lt-danger); }
+
+/* ------------------------------------------------- all-subscriptions page
+
+   Laid out like YouTube's /feed/channels: a 136px circular avatar, the channel
+   name and metadata, and the follow control on the right. */
+
+.lt-page-title {
+  font: 400 24px/1.3 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  margin: 8px 0 24px;
+}
+
+.lt-channels {
+  display: flex;
+  flex-direction: column;
+  max-width: 1096px;
+}
+
+.lt-channel {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--lt-border);
+}
+.lt-channel:last-child { border-bottom: 0; }
+
+.lt-channel-avatar {
+  flex: none;
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lt-surface);
+  text-decoration: none;
+}
+.lt-channel-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lt-channel-avatar-initial {
+  font: 500 52px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+
+.lt-channel-info {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.lt-channel-name {
+  font: 400 20px/1.4 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+.lt-channel-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--lt-text-dim);
+}
+.lt-channel-desc {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--lt-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lt-channel-buttons { flex: none; }
+
+/* The avatar dominates the row at narrow widths; scale it back. */
+@media (max-width: 900px) {
+  .lt-channel-avatar { width: 88px; height: 88px; }
+  .lt-channel-avatar-initial { font-size: 34px; }
+  .lt-channel { gap: 16px; }
+}
 
 .lt-empty {
   max-width: 520px;
@@ -479,58 +570,73 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 #localtube-queue strong { font-weight: 500; }
 #localtube-queue a { color: inherit; }
 
-/* --------------------------------------------------------- sidebar links */
+/* --------------------------------------------------------- sidebar entries
 
-.lt-guide-link {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 0 12px;
-  height: 40px;
-  border-radius: 10px;
-  color: var(--lt-text);
-  text-decoration: none;
-  font: 400 14px/1 Roboto, Arial, sans-serif;
-}
-.lt-guide-link:hover { background: var(--lt-surface-hover); }
-.lt-guide-channel { gap: 16px; }
-.lt-guide-avatar {
+   The sidebar entries are clones of YouTube's own, so they inherit its styling
+   and need almost nothing here. Only the two pieces we substitute for Polymer
+   elements need sizing: our label span and our icon span. */
+
+.lt-guide-icon svg {
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  flex: none;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lt-surface);
+  fill: currentColor;
+  display: block;
 }
-.lt-guide-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.lt-guide-avatar-initial {
-  font: 500 12px/1 Roboto, Arial, sans-serif;
-  color: var(--lt-text);
-}
-.lt-guide-channel-name {
-  flex: 1;
-  min-width: 0;
+.lt-guide-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lt-guide-more {
-  border: 0;
-  background: transparent;
+
+/* The "LocalTube" section header, shaped like YouTube's own "You" row: no
+   leading icon — the label starts where the icons below it do — a 16px medium
+   label, and a chevron. Measured from a signed-in guide. */
+.localtube-guide-entry[data-lt-header] .lt-guide-icon {
+  display: none;
+}
+.localtube-guide-entry[data-lt-header] .lt-guide-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+.lt-guide-arrow {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-inline-start: 6px;
+}
+.lt-guide-arrow svg {
   width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font: 400 14px/1 Roboto, Arial, sans-serif;
-  color: var(--lt-text);
+  height: 100%;
+  fill: currentColor;
+  display: block;
+}
+/* The Subscriptions group reads as its own section, the way it does when signed
+   in. Measured from a live ytd-guide-section-renderer: a 1px rule at 20% and
+   12px of padding either side. */
+:root { --lt-guide-divider: rgba(0, 0, 0, 0.2); }
+html[data-localtube-theme='dark'], html[dark] { --lt-guide-divider: rgba(255, 255, 255, 0.2); }
+html[data-localtube-theme='light'] { --lt-guide-divider: rgba(0, 0, 0, 0.2); }
+
+/* A plain sibling element rather than a border or pseudo-element on the row:
+   guide entries are inset asymmetrically (12px left, 24px right of a 240px
+   sidebar), so anything anchored to a row stops short of one edge. A block
+   child of the item list spans it exactly, whatever the insets are. */
+.lt-guide-rule {
+  height: 1px;
+  /* The item list is itself inset 12px; negative margins take the rule out to
+     the sidebar edges, where YouTube's own section rules sit. */
+  margin: 12px -12px;
+  background: var(--lt-guide-divider);
 }
 
-.lt-guide-section {
-  padding: 12px 12px 4px;
-  font: 500 14px/1 Roboto, Arial, sans-serif;
-  color: var(--lt-text-dim);
-  border-top: 1px solid var(--lt-border);
-  margin-top: 12px;
+/* Matches yt-img-shadow's own metrics, measured from a live guide entry. */
+.lt-guide-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-inline-end: 24px;
+  flex: none;
+  object-fit: cover;
+  background: var(--lt-surface);
 }
+

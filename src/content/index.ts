@@ -16,8 +16,9 @@ import {
 } from '@/content/youtube-dom';
 import { renderHome, unmountHome } from '@/content/home';
 import { AVATAR_ID, closeMenu, mountMasthead } from '@/content/masthead';
-import { CHANNELS_ID, mountNavRail, renderGuideChannels } from '@/content/nav-rail';
+import { CHANNELS_ID, SECTION_ID, mountNavRail, renderGuideChannels } from '@/content/nav-rail';
 import { syncNativeSkin } from '@/content/native-skin';
+import { mountHistory } from '@/content/history';
 import { mountQueue } from '@/content/queue';
 import { mountSubscribeButton } from '@/content/subscribe-button';
 import {
@@ -51,6 +52,7 @@ async function route(): Promise<void> {
     mountSubscribeEverywhere(),
     mountVideoActions(),
     mountQueue(),
+    mountHistory(),
   ]);
 }
 
@@ -126,9 +128,12 @@ function watchForMissingControls(): void {
       void mountVideoActions().catch(() => undefined);
     if (nativeSkinOn() && !document.getElementById(AVATAR_ID))
       void mountMasthead().catch(() => undefined);
-    // The guide is re-rendered on its own too, taking the channel list with it.
+    // The guide is re-rendered on its own too, taking both LocalTube groups
+    // with it.
     if (anchor('guide') && !document.getElementById(CHANNELS_ID))
       void renderGuideChannels().catch(() => undefined);
+    if (anchor('guide') && !document.getElementById(SECTION_ID))
+      void mountNavRail().catch(() => undefined);
   };
   new MutationObserver(() => {
     if (queued) return;

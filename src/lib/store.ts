@@ -52,7 +52,12 @@ export const DEFAULT_SETTINGS: Settings = {
   feedTtlMinutes: 20,
   replaceHome: true,
   nativeSkin: true,
+  recordHistory: true,
 };
+
+/** How many watched videos History keeps. Old entries fall off the end rather
+ *  than growing chrome.storage.local without bound. */
+export const HISTORY_LIMIT = 500;
 
 /** Fixed playlists, created on first read so the rest of the code can assume
  *  they exist. Their ids are stable so backups restore onto them cleanly. */
@@ -70,6 +75,7 @@ function emptyData(): LocalTubeData {
     version: SCHEMA_VERSION,
     subscriptions: {},
     playlists: {},
+    history: [],
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -96,6 +102,9 @@ export async function getData(): Promise<LocalTubeData> {
   const data: LocalTubeData = {
     ...emptyData(),
     ...saved,
+    // Explicit rather than left to the spread: a store written by a build that
+    // predates History has no such key, and `undefined` would win over [].
+    history: saved?.history ?? [],
     settings: { ...DEFAULT_SETTINGS, ...(saved?.settings ?? {}) },
   };
   if (ensureSystemPlaylists(data)) await storage(() => chrome.storage.local.set({ [DATA_KEY]: data }));

@@ -32,7 +32,13 @@ export interface CardAction {
   onClick: (video: Video) => void | Promise<void>;
 }
 
-export function videoCard(video: Video, action?: CardAction): HTMLElement {
+/** Per-grid options. `note` replaces the card's publish date — History cares
+ *  about when you watched a video, not when it was posted. */
+export interface GridOptions {
+  note?: (video: Video) => string;
+}
+
+export function videoCard(video: Video, action?: CardAction, options?: GridOptions): HTMLElement {
   const card = document.createElement('div');
   card.className = 'lt-card';
 
@@ -58,7 +64,11 @@ export function videoCard(video: Video, action?: CardAction): HTMLElement {
 
   const sub = document.createElement('div');
   sub.className = 'lt-card-sub';
-  sub.textContent = [video.channelTitle, formatViews(video.views), timeAgo(video.published)]
+  sub.textContent = [
+    video.channelTitle,
+    formatViews(video.views),
+    options?.note ? options.note(video) : timeAgo(video.published),
+  ]
     .filter(Boolean)
     .join(' · ');
 
@@ -83,10 +93,10 @@ export function videoCard(video: Video, action?: CardAction): HTMLElement {
   return card;
 }
 
-export function videoGrid(videos: Video[], action?: CardAction): HTMLElement {
+export function videoGrid(videos: Video[], action?: CardAction, options?: GridOptions): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'lt-grid';
-  for (const video of videos) grid.appendChild(videoCard(video, action));
+  for (const video of videos) grid.appendChild(videoCard(video, action, options));
   return grid;
 }
 

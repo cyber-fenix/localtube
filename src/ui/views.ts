@@ -1,18 +1,25 @@
-// The four LocalTube views. They render into a container the content script
+// The LocalTube views. They render into a container the content script
 // mounts inside YouTube's home page; nothing here knows about YouTube's DOM.
 
 import { loadFeed, type FeedStatus } from '@/lib/feed';
 import { deletePlaylist, getPlaylist, listPlaylists, removeFromPlaylist, renamePlaylist, createPlaylist } from '@/lib/playlists';
-import { getFeedCache } from '@/lib/store';
+import { clearHistory, historyEnabled, listHistory, removeFromHistory, setHistoryEnabled } from '@/lib/history';
+import { HISTORY_LIMIT, getFeedCache } from '@/lib/store';
 import { isPlaceholderTitle, listSubscriptions, resolveAllTitles, unsubscribe } from '@/lib/subscriptions';
 import { emptyState, timeAgo, videoGrid } from '@/ui/cards';
-import type { Playlist, Video } from '@/types';
+import type { HistoryEntry, Playlist, Video } from '@/types';
 
 export type View =
   | { name: 'feed' }
   | { name: 'subscriptions' }
   | { name: 'playlists' }
-  | { name: 'playlist'; id: string };
+  | { name: 'playlist'; id: string }
+  // Watch Later and Liked are ordinary playlists with fixed ids, but they get
+  // their own view names so the sidebar can link to them without knowing the
+  // id — a restored backup could carry different ones.
+  | { name: 'watch-later' }
+  | { name: 'liked' }
+  | { name: 'history' };
 
 const PAGE_SIZE = 60;
 
@@ -24,7 +31,14 @@ export function parseViewHash(hash: string): View | null {
   const match = /#localtube=([^&]+)/.exec(hash);
   if (!match) return null;
   const value = decodeURIComponent(match[1]);
-  if (value === 'subscriptions' || value === 'playlists' || value === 'feed')
+  if (
+    value === 'subscriptions' ||
+    value === 'playlists' ||
+    value === 'feed' ||
+    value === 'watch-later' ||
+    value === 'liked' ||
+    value === 'history'
+  )
     return { name: value };
   if (value.startsWith('playlist:')) return { name: 'playlist', id: value.slice('playlist:'.length) };
   return null;
@@ -55,14 +69,17 @@ function header(active: View['name'], extra?: HTMLElement[]): HTMLElement {
     [{ name: 'feed' }, 'Feed'],
     [{ name: 'subscriptions' }, 'Subscriptions'],
     [{ name: 'playlists' }, 'Playlists'],
+    [{ name: 'history' }, 'History'],
   ];
   for (const [view, label] of tabs) {
     const tab = document.createElement('button');
     tab.type = 'button';
     tab.className = 'lt-tab';
     tab.textContent = label;
-    // A playlist detail page is "inside" Playlists, so keep that tab lit.
-    const isActive = view.name === active || (active === 'playlist' && view.name === 'playlists');
+    // A playlist detail page — including Watch Later and Liked — is "inside"
+    // Playlists, so keep that tab lit.
+    const inPlaylists = active === 'playlist' || active === 'watch-later' || active === 'liked';
+    const isActive = view.name === active || (inPlaylists && view.name === 'playlists');
     tab.setAttribute('aria-selected', String(isActive));
     tab.addEventListener('click', () => go(view));
     bar.appendChild(tab);
@@ -167,7 +184,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
   const [subscriptions, cache] = await Promise.all([listSubscriptions(), getFeedCache()]);
 
   const body = document.createElement('div');
-  body.className = 'lt-list';
+  body.className = 'lt-channels';
 
   if (subscriptions.length === 0) {
     body.appendChild(
@@ -178,48 +195,90 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     );
   }
 
+  // Laid out like YouTube's own /feed/channels: a 136px circular avatar, the
+  // channel name, a metadata line, then Subscribed on the right.
+  //
+  // YouTube's metadata line reads "@handle • 2.7M subscribers". LocalTube has
+  // neither — the handle and subscriber count come from YouTube's API, and the
+  // public channel feed carries neither — so the line says what is actually
+  // known instead of inventing numbers: how much of the channel is in the feed,
+  // and when it last posted.
   for (const channel of subscriptions) {
     const row = document.createElement('div');
-    row.className = 'lt-row';
+    row.className = 'lt-channel';
 
+    const initial = channel.title.trim().charAt(0).toUpperCase() || '?';
+    const avatarLink = document.createElement('a');
+    avatarLink.className = 'lt-channel-avatar';
+    avatarLink.href = `/channel/${channel.id}`;
+    const useInitial = (): void => {
+      avatarLink.replaceChildren(document.createTextNode(initial));
+      avatarLink.classList.add('lt-channel-avatar-initial');
+    };
     if (channel.avatar) {
       const img = document.createElement('img');
-      img.src = channel.avatar;
       img.alt = '';
-      row.appendChild(img);
+      img.loading = 'lazy';
+      img.width = 136;
+      img.height = 136;
+      img.addEventListener('error', useInitial, { once: true });
+      img.src = channel.avatar;
+      avatarLink.appendChild(img);
+    } else {
+      useInitial();
     }
 
-    const main = document.createElement('div');
-    main.className = 'lt-row-main';
-    const link = document.createElement('a');
-    link.className = 'lt-row-title';
-    link.href = `/channel/${channel.id}`;
-    link.textContent = isPlaceholderTitle(channel) ? 'Loading channel name…' : channel.title;
-    const sub = document.createElement('div');
-    sub.className = 'lt-row-sub';
+    const info = document.createElement('a');
+    info.className = 'lt-channel-info';
+    info.href = `/channel/${channel.id}`;
+
+    const name = document.createElement('div');
+    name.className = 'lt-channel-name';
+    name.textContent = isPlaceholderTitle(channel) ? 'Loading channel name…' : channel.title;
+
+    const meta = document.createElement('div');
+    meta.className = 'lt-channel-meta';
     const entry = cache[channel.id];
     if (entry?.error) {
-      sub.classList.add('lt-row-warn');
-      sub.textContent = `Feed unavailable (${entry.error}) — the channel may have been deleted`;
+      meta.classList.add('lt-row-warn');
+      meta.textContent = `Feed unavailable (${entry.error}) — the channel may have been deleted`;
+    } else if (entry && entry.videos.length > 0) {
+      const latest = entry.videos[0];
+      meta.textContent = `${entry.videos.length} recent videos · latest ${timeAgo(latest.published)}`;
     } else {
-      sub.textContent = entry ? `${entry.videos.length} recent videos` : 'Not loaded yet';
+      meta.textContent = entry ? 'No recent uploads' : 'Not loaded yet';
     }
-    main.append(link, sub);
+
+    const followedOn = document.createElement('div');
+    followedOn.className = 'lt-channel-desc';
+    followedOn.textContent = `Followed ${timeAgo(new Date(channel.addedAt).toISOString())}`;
+
+    info.append(name, meta, followedOn);
 
     const remove = document.createElement('button');
     remove.type = 'button';
-    remove.className = 'lt-btn';
-    remove.textContent = 'Unfollow';
+    remove.className = 'lt-native lt-native-subscribe lt-accent';
+    remove.setAttribute('aria-pressed', 'true');
+    remove.textContent = 'Subscribed';
+    remove.title = 'Following in LocalTube — click to unfollow';
     remove.addEventListener('click', async () => {
       await unsubscribe(channel.id);
       rerender();
     });
 
-    row.append(main, remove);
+    const buttons = document.createElement('div');
+    buttons.className = 'lt-channel-buttons';
+    buttons.appendChild(remove);
+
+    row.append(avatarLink, info, buttons);
     body.appendChild(row);
   }
 
-  root.replaceChildren(header('subscriptions'), body, localOnlyNote());
+  const heading = document.createElement('h1');
+  heading.className = 'lt-page-title';
+  heading.textContent = 'All subscriptions';
+
+  root.replaceChildren(header('subscriptions'), heading, body, localOnlyNote());
 
   // Repair any channel still listed under its raw id — followed through a
   // collaboration button before its name could be looked up, or by an older
@@ -350,4 +409,77 @@ export async function playlistView(root: HTMLElement, id: string, rerender: () =
         });
 
   root.replaceChildren(header('playlist', [play]), title, meta, body, localOnlyNote());
+}
+
+/* --------------------------------------------------------------- history */
+
+export async function historyView(root: HTMLElement, rerender: () => void): Promise<void> {
+  const [history, enabled] = await Promise.all([listHistory(), historyEnabled()]);
+
+  // Pausing is offered next to the list rather than buried in the popup: the
+  // moment you want to stop recording is the moment you are looking at what has
+  // been recorded.
+  const pause = document.createElement('button');
+  pause.type = 'button';
+  pause.className = 'lt-btn';
+  pause.textContent = enabled ? 'Pause history' : 'Resume history';
+  pause.title = enabled
+    ? 'Stop adding watched videos to this list'
+    : 'Start recording watched videos again';
+  pause.addEventListener('click', async () => {
+    await setHistoryEnabled(!enabled);
+    rerender();
+  });
+
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'lt-btn';
+  clear.textContent = 'Clear all';
+  clear.disabled = history.length === 0;
+  clear.addEventListener('click', async () => {
+    if (!confirm('Clear your entire LocalTube watch history? This cannot be undone.')) return;
+    await clearHistory();
+    rerender();
+  });
+
+  const title = document.createElement('h1');
+  title.className = 'lt-page-title';
+  title.textContent = 'Watch history';
+
+  const note = document.createElement('p');
+  note.className = 'lt-note';
+  note.textContent = enabled
+    ? `A video is added after ten seconds of playback. The last ${HISTORY_LIMIT} are kept, in this browser only — YouTube is never told what you watched.`
+    : 'History recording is paused. Nothing new is being added.';
+
+  const body =
+    history.length === 0
+      ? emptyState(
+          enabled ? 'Nothing watched yet' : 'History is paused',
+          enabled
+            ? 'Videos you watch on YouTube will appear here, newest first. Nothing leaves this browser.'
+            : 'Resume recording to start collecting watched videos again.',
+        )
+      : videoGrid(
+          history,
+          {
+            label: 'Remove',
+            title: 'Remove from history',
+            onClick: async (video: Video) => {
+              await removeFromHistory(video.id);
+              rerender();
+            },
+          },
+          // When you watched it, not when it was posted — the publish date is
+          // the wrong fact on a history page.
+          {
+            note: (video: Video) => {
+              const watched = (video as HistoryEntry).watchedAt;
+              const ago = watched ? timeAgo(new Date(watched).toISOString()) : '';
+              return ago ? `watched ${ago}` : '';
+            },
+          },
+        );
+
+  root.replaceChildren(header('history', [pause, clear]), title, note, body, localOnlyNote());
 }

@@ -49,6 +49,7 @@ async function refresh(): Promise<void> {
   );
   $<HTMLInputElement>('replaceHome').checked = data.settings.replaceHome;
   $<HTMLInputElement>('nativeSkin').checked = data.settings.nativeSkin;
+  $<HTMLInputElement>('recordHistory').checked = data.settings.recordHistory;
   $<HTMLInputElement>('feedTtlMinutes').value = String(data.settings.feedTtlMinutes);
 }
 
@@ -67,6 +68,11 @@ $<HTMLInputElement>('replaceHome').addEventListener('change', async (event) => {
 $<HTMLInputElement>('nativeSkin').addEventListener('change', async (event) => {
   await setSettings({ nativeSkin: (event.target as HTMLInputElement).checked });
   setStatus('Saved. Reload any open YouTube tab to see the change.');
+});
+
+$<HTMLInputElement>('recordHistory').addEventListener('change', async (event) => {
+  await setSettings({ recordHistory: (event.target as HTMLInputElement).checked });
+  setStatus('Saved. Existing history is kept; clear it from the History page.');
 });
 
 $<HTMLInputElement>('feedTtlMinutes').addEventListener('change', async (event) => {

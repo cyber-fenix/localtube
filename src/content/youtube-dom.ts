@@ -132,6 +132,15 @@ export const HIDE_SELECTORS: string[] = [
   // Sidebar — "Sign in to like videos, comment, and subscribe"
   'ytd-guide-signin-promo-renderer',
   'ytd-mini-guide-renderer ytd-guide-signin-promo-renderer',
+  // Sidebar — YouTube's signed-out "You" group and the History row beside it.
+  // Both lead to a sign-in wall, and LocalTube's own section stands in for them
+  // one group below; leaving them shows two History rows that do different
+  // things. Matched by destination rather than by label, which is localised.
+  // Signed out these are two plain entries; signed in, "You" is a collapsible
+  // section. Both shapes are listed so the rule survives either.
+  'ytd-guide-section-renderer > #items > ytd-guide-entry-renderer:has(a#endpoint[href="/feed/you"])',
+  'ytd-guide-section-renderer > #items > ytd-guide-entry-renderer:has(a#endpoint[href="/feed/history"])',
+  'ytd-guide-collapsible-section-entry-renderer:has(a#endpoint[href="/feed/you"])',
   // Under a video — the comment box's sign-in prompt
   '#comments ytd-comment-simplebox-renderer:has(a[href*="accounts.google.com"])',
   'ytd-comments-header-renderer yt-button-view-model:has(a[href*="accounts.google.com"])',

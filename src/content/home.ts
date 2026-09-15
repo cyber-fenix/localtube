@@ -7,10 +7,12 @@
 
 import { anchor, currentRoute, markUrlHandled, waitForAnchor } from '@/content/youtube-dom';
 import { flashToast } from '@/content/toast';
+import { systemPlaylistId } from '@/lib/playlists';
 import { getSettings } from '@/lib/store';
 import {
   VIEW_CHANGED,
   feedView,
+  historyView,
   parseViewHash,
   playlistView,
   playlistsView,
@@ -81,7 +83,9 @@ export async function renderHome(): Promise<void> {
     void renderHome();
   };
 
-  const view: View = hashView ?? { name: 'feed' };
+  // The Subscriptions page opens on the channel list, which is what it is
+  // named for; home opens on the video feed. Either tab still switches freely.
+  const view: View = hashView ?? { name: route === 'subscriptions' ? 'subscriptions' : 'feed' };
   switch (view.name) {
     case 'subscriptions':
       await subscriptionsView(root, rerender);
@@ -91,6 +95,15 @@ export async function renderHome(): Promise<void> {
       break;
     case 'playlist':
       await playlistView(root, view.id, rerender);
+      break;
+    // Watch Later and Liked are playlists; the view name only spares the
+    // sidebar from having to know their ids.
+    case 'watch-later':
+    case 'liked':
+      await playlistView(root, await systemPlaylistId(view.name), rerender);
+      break;
+    case 'history':
+      await historyView(root, rerender);
       break;
     default:
       await feedView(root, alive);

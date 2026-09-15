@@ -33,6 +33,12 @@ export interface Playlist {
   createdAt: number;
 }
 
+/** A watched video, newest first. Local only — never sent anywhere. */
+export interface HistoryEntry extends Video {
+  /** Epoch ms of the most recent watch. */
+  watchedAt: number;
+}
+
 export interface Settings {
   /** How long a channel's cached feed stays fresh before revalidating. */
   feedTtlMinutes: number;
@@ -40,6 +46,8 @@ export interface Settings {
   replaceHome: boolean;
   /** Hide YouTube's own signed-out controls and wear its styling instead. */
   nativeSkin: boolean;
+  /** Record watched videos in the local History list. */
+  recordHistory: boolean;
 }
 
 /** Everything a backup contains. Bump `version` only with a migration. */
@@ -47,6 +55,8 @@ export interface LocalTubeData {
   version: number;
   subscriptions: Record<string, Subscription>;
   playlists: Record<string, Playlist>;
+  /** Watch history, newest first, capped at HISTORY_LIMIT. */
+  history: HistoryEntry[];
   settings: Settings;
 }
 
