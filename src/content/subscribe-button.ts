@@ -10,6 +10,7 @@
 import { anchor, currentRoute, generation, waitForAnchor } from '@/content/youtube-dom';
 import { nativeSkinOn } from '@/content/native-skin';
 import { readContext, waitForContext } from '@/content/page-context';
+import { singleFlight } from '@/content/single-flight';
 import { flashToast } from '@/content/toast';
 import { isSubscribed, toggleSubscription } from '@/lib/subscriptions';
 
@@ -41,7 +42,11 @@ function paint(button: HTMLButtonElement, following: boolean, native: boolean): 
  * bare button-view-model inside yt-flexible-actions-view-model, so the channel
  * id has to come from the page context instead.
  */
-export async function mountSubscribeButton(): Promise<void> {
+/** Single-flighted for the same reason as the watch-page actions: two callers
+ *  inside one mount each build their own button. */
+export const mountSubscribeButton = singleFlight(mountSubscribeButtonOnce);
+
+async function mountSubscribeButtonOnce(): Promise<void> {
   if (currentRoute() !== 'channel') return;
 
   // YouTube renders the channel header after document_idle, so the anchor is

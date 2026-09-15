@@ -6,7 +6,8 @@
 
 import { anchor, currentRoute, currentVideoId, generation, waitForAnchor } from '@/content/youtube-dom';
 import { nativeSkinOn } from '@/content/native-skin';
-import { readContext, waitForContext } from '@/content/page-context';
+import { readContext, waitForVideoContext } from '@/content/page-context';
+import { singleFlight } from '@/content/single-flight';
 import { flashToast } from '@/content/toast';
 import {
   addToPlaylist,
@@ -153,7 +154,14 @@ document.addEventListener('keydown', (event) => {
 
 /* --------------------------------------------------------------- mount */
 
-export async function mountVideoActions(): Promise<void> {
+/**
+ * Single-flighted: `pill()` looks its button up by id in the DOCUMENT, so a
+ * button built by a mount that has not inserted it yet is invisible to a second
+ * caller, which then builds its own — two Likes and two Dislikes in one group.
+ */
+export const mountVideoActions = singleFlight(mountVideoActionsOnce);
+
+async function mountVideoActionsOnce(): Promise<void> {
   if (currentRoute() !== 'watch') {
     closePopover();
     return;
@@ -184,7 +192,11 @@ export async function mountVideoActions(): Promise<void> {
 
   // Enrich in the background. The click handlers close over `video`, so a save
   // made after this resolves carries the full details.
-  void waitForContext().then((context) => {
+  //
+  // Waited on by video id, not merely on "some context exists": until the
+  // MAIN-world bridge catches up it still describes the PREVIOUS video, and
+  // saving one of those to a playlist gives it the wrong title and thumbnail.
+  void waitForVideoContext(videoId).then((context) => {
     if (!context || currentVideoId() !== videoId) return;
     if (context.videoTitle) video.title = context.videoTitle;
     if (context.channelId) video.channelId = context.channelId;
@@ -253,4 +265,12 @@ export async function mountVideoActions(): Promise<void> {
 
   // First in the row, where YouTube puts like/dislike.
   if (row.parentElement !== host) host.insertBefore(row, host.firstChild);
+
+  // Anything carrying our ids that is not the control we just mounted is a
+  // leftover from a racing mount or a container YouTube re-rendered around.
+  for (const id of [LIKE_ID, DISLIKE_ID, SAVE_ID, ROW_ID]) {
+    const keep = { [LIKE_ID]: like, [DISLIKE_ID]: dislike, [SAVE_ID]: save, [ROW_ID]: row }[id];
+    for (const stray of Array.from(document.querySelectorAll(`#${id}`)))
+      if (stray !== keep) stray.remove();
+  }
 }

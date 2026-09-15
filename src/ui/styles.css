@@ -25,6 +25,7 @@
   --lt-invert-bg: #0f0f0f;
   --lt-invert-text: #fff;
   --lt-danger: #c00;
+  --lt-stack: rgba(0, 0, 0, 0.35);
 }
 
 html[data-localtube-theme='dark'],
@@ -42,6 +43,9 @@ html[dark] {
   --lt-invert-bg: #f1f1f1;
   --lt-invert-text: #0f0f0f;
   --lt-danger: #ff8a80;
+  /* The stack layers behind a playlist cover: lighter than the page, the way
+     YouTube's are, so they read as sheets under the thumbnail. */
+  --lt-stack: rgba(255, 255, 255, 0.35);
 }
 
 /* An explicit light stamp always wins, even under html[dark]. */
@@ -58,6 +62,7 @@ html[data-localtube-theme='light'] {
   --lt-invert-bg: #0f0f0f;
   --lt-invert-text: #fff;
   --lt-danger: #c00;
+  --lt-stack: rgba(0, 0, 0, 0.35);
 }
 
 #localtube-root {
@@ -68,7 +73,22 @@ html[data-localtube-theme='light'] {
   width: 100%;
   min-width: 0;
 
-  padding: 16px 24px 64px;
+  /* YouTube's rich grid sits 16px inside the browse container on each side
+     (measured: browse at x=240 w=1160, grid contents at x=256 w=1128). Ours
+     matches, so a LocalTube page lines up with the page it replaces. */
+  padding: 16px 16px 64px;
+
+  /* And YouTube caps that content and centres it: ytd-browse is a centring
+     flex container and its two-column results renderer carries a 1284px
+     max-width (measured on /feed/history). Below that the column simply fills,
+     which is why this is invisible on an ordinary window and only shows up on a
+     wide one — where, without it, a LocalTube page kept stretching while
+     YouTube's own stopped. */
+  /* border-box, or the 16px padding is added OUTSIDE the cap and the column
+     overflows its container by exactly 32px. */
+  box-sizing: border-box;
+  max-width: 1316px;
+  margin-inline: auto;
   color: var(--lt-text);
   font-family: Roboto, Arial, sans-serif;
 }
@@ -106,6 +126,14 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 
 .lt-spacer { flex: 1; }
 
+/* A tab row that sits directly in the page column lines up with the grids
+   below it, whose items are inset 8px the way YouTube's are. Rows nested in a
+   view's own block (Subscriptions, History) are already aligned by that block. */
+#localtube-root > .lt-header { padding-inline: 8px; }
+/* margin, not padding: padding would move the text but leave the heading's own
+   box at the column edge, so a measurement of it keeps reporting the old x. */
+#localtube-root > .lt-page-title { margin-inline: 8px; }
+
 .lt-status {
   font-size: 12px;
   color: var(--lt-text-dim);
@@ -129,12 +157,25 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 .lt-btn-primary:hover { background: var(--lt-accent); filter: brightness(1.08); }
 .lt-btn:disabled { opacity: .5; cursor: default; }
 
-/* ---------------------------------------------------------------- cards */
+/* ---------------------------------------------------------------- cards
+
+   The home-feed card, measured on a live youtube.com (dark, 1496px, guide
+   open). YouTube's rich grid computes its columns from
+   `--ytd-rich-grid-item-min-width: 310px` and a 16px item margin, which at a
+   1224px content width gives three 392px cards:
+
+     grid     1224 of content, items inset 8px, 16px between columns and 32px
+              between rows
+     cover    the card's full width at 16:9, 12px radius, 12px to the metadata
+     avatar   36px circle, 8px to the text
+     title    500 16px/22px clamped to 2 lines, 24px kept clear for the action
+     rows     14px/20px, 2px apart — bigger than the 12px used on list pages */
 
 .lt-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px 16px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 32px 16px;
+  padding-inline: 8px;
 }
 
 .lt-card { position: relative; }
@@ -159,38 +200,74 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
   display: block;
 }
 
-.lt-meta { padding: 10px 2px 0; }
+.lt-card-body {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 12px;
+}
+
+.lt-card-avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin-right: 8px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lt-surface);
+}
+.lt-card-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lt-card-avatar-initial { font: 500 16px/1 Roboto, Arial, sans-serif; color: var(--lt-text); }
+
+.lt-meta { flex: 1 1 auto; min-width: 0; }
 
 .lt-card-title {
-  font: 500 15px/1.4 Roboto, Arial, sans-serif;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  padding-right: 24px;
+  font: 500 16px/22px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  text-decoration: none;
 }
 
-.lt-card-sub {
-  margin-top: 4px;
-  font-size: 13px;
+.lt-card-row {
+  margin-top: 2px;
+  font: 400 14px/20px Roboto, Arial, sans-serif;
   color: var(--lt-text-dim);
 }
 
+/* Kept for callers that still pass a single metadata line. */
+.lt-card-sub {
+  margin-top: 2px;
+  font: 400 14px/20px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+
+/* The 40x40 slot where YouTube's kebab sits, aligned with the title's top. */
 .lt-card-action {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  min-width: 40px;
+  height: 40px;
   border: none;
-  border-radius: 999px;
-  padding: 5px 12px;
+  border-radius: 20px;
+  padding: 0 12px;
   font: 500 12px/1 Roboto, Arial, sans-serif;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.75);
+  color: var(--lt-text);
+  background: var(--lt-surface);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 .lt-card:hover .lt-card-action,
 .lt-card-action:focus-visible { opacity: 1; }
+.lt-card-action:hover { background: var(--lt-surface-hover); }
 
 /* ------------------------------------------------------ lists and states */
 
@@ -224,36 +301,81 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 .lt-row a { color: inherit; text-decoration: none; }
 .lt-row-warn { color: var(--lt-danger); }
 
-/* ------------------------------------------------- all-subscriptions page
-
-   Laid out like YouTube's /feed/channels: a 136px circular avatar, the channel
-   name and metadata, and the follow control on the right. */
+/* --------------------------------------------------------- page headings */
 
 .lt-page-title {
-  font: 400 24px/1.3 Roboto, Arial, sans-serif;
+  /* Measured on /feed/history and /feed/channels: YouTube's page headline is
+     700 36px/50px — the same `dynamicTextViewModelH1` on all of these pages. */
+  font: 700 36px/50px Roboto, Arial, sans-serif;
   color: var(--lt-text);
-  margin: 8px 0 24px;
+  margin: 0 0 8px;
 }
 
-.lt-channels {
-  display: flex;
-  flex-direction: column;
-  max-width: 1096px;
+/* The line under a page title: video count, or what History records. Given real
+   space below it — text crowding the first row was the most visible difference
+   from YouTube's own pages. */
+.lt-page-sub {
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+  margin: 0 0 24px;
+  max-width: 900px;
 }
+
+/* ------------------------------------------------- all-subscriptions page
+
+   Measured on a live /feed/channels (dark, 1496px, guide open):
+
+     column     928 of content inside 48px page padding, centred (x=404)
+     title      700 36px/50px with 24px above it
+     chip       32 tall at an 8px radius, 12px lead padding, 500 14px/20px on a
+                10% white fill, with an 18px chevron
+     row        136 tall with 16px beneath and NO rule between rows
+     avatar     136 circle, 16px to the text
+     name       400 18px/26px, 8px beneath, clamped to 2 lines
+     metadata   12px/18px, 4px beneath
+     description 12px/18px clamped to 2 lines
+     button     40 tall at a 20px radius, 500 14px/40px on a 10% white fill
+
+   The column is the part that had been wrong: 928, not the page's full width. */
+
+.lt-subs-page {
+  box-sizing: border-box;
+  max-width: 1024px;
+  margin-inline: auto;
+  padding-inline: 48px;
+}
+
+.lt-chips { margin-bottom: 24px; }
+
+.lt-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  border: none;
+  border-radius: 8px;
+  font: 500 14px/20px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: var(--lt-surface);
+  cursor: pointer;
+}
+.lt-chip:hover { background: var(--lt-surface-hover); }
+.lt-chip svg { width: 18px; height: 18px; margin-left: 4px; fill: currentColor; }
+
+.lt-channels { display: flex; flex-direction: column; }
 
 .lt-channel {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--lt-border);
+  height: 136px;
+  margin-bottom: 16px;
 }
-.lt-channel:last-child { border-bottom: 0; }
 
 .lt-channel-avatar {
   flex: none;
   width: 136px;
   height: 136px;
+  margin-right: 16px;
   border-radius: 50%;
   overflow: hidden;
   display: flex;
@@ -269,37 +391,63 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 }
 
 .lt-channel-info {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1 1 auto;
   min-width: 0;
+  height: 120px;
+  padding-right: 16px;
   color: inherit;
   text-decoration: none;
 }
 .lt-channel-name {
-  font: 400 20px/1.4 Roboto, Arial, sans-serif;
-  color: var(--lt-text);
-}
-.lt-channel-meta {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--lt-text-dim);
-}
-.lt-channel-desc {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--lt-text-dim);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  margin-bottom: 8px;
+  /* 400 at 18px, not the 20px this used to be — the computed shorthand carries
+     no weight, so YouTube leaves these names at normal weight. */
+  font: 400 18px/26px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+.lt-channel-meta {
+  margin-bottom: 4px;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+.lt-channel-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
 }
 
-.lt-channel-buttons { flex: none; }
+.lt-channel-buttons { flex: none; display: flex; align-items: center; }
+
+/* YouTube's tonal pill, wearing LocalTube's red edge. */
+.lt-channel-btn {
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 20px;
+  font: 500 14px/40px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: var(--lt-surface);
+  cursor: pointer;
+}
+.lt-channel-btn:hover { background: var(--lt-surface-hover); }
 
 /* The avatar dominates the row at narrow widths; scale it back. */
 @media (max-width: 900px) {
+  .lt-subs-page { padding-inline: 16px; }
+  .lt-channel { height: auto; }
   .lt-channel-avatar { width: 88px; height: 88px; }
   .lt-channel-avatar-initial { font-size: 34px; }
-  .lt-channel { gap: 16px; }
+  .lt-channel-info { height: auto; padding: 12px 12px 12px 0; }
 }
 
 .lt-empty {
@@ -311,9 +459,495 @@ ytd-browse.localtube-active > *:not(#localtube-root) {
 .lt-empty p { font-size: 14px; color: var(--lt-text-dim); margin: 0 0 20px; line-height: 1.6; }
 
 .lt-note {
-  margin-top: 24px;
+  margin-top: 40px;
   font-size: 12px;
   color: var(--lt-text-dim);
+}
+
+/* ------------------------------------------------------------- playlists
+
+   Read off a computed-style dump of a live /feed/playlists card (dark, 1322px
+   wide, guide open). Every number below is measured, not chosen:
+
+     card       246.5 wide, 8px side margins, 32px below -> 4 per row here
+     cover      the full card width at 16:9 (138.65), 12px above the metadata
+     stack      drawn INSIDE that height, not added above it
+     title      500 16px/22px, one line = 22px
+     metadata   two rows of 22px (12px/18px text plus 4px), so 66px of metadata
+     card total 216.65 = 151 cover block + 66 metadata
+     hover      a wash inset -12px top, -8px sides and bottom, 8px radius */
+
+.lt-plgrid {
+  display: grid;
+  /* 246px, not the 300px guessed earlier: YouTube fits four of these across a
+     1050px content area where a 300px minimum fits only three. */
+  grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
+  gap: 32px 16px;
+  /* YouTube's items carry 8px side margins inside the grid, which is why its
+     first card starts 8px in from the grid box. */
+  padding-inline: 8px;
+}
+
+.lt-pl-card { position: relative; }
+
+/* YouTube's touch-feedback wash, which reaches further above the cover than
+   below it — the card is taller than its content by exactly that much. */
+.lt-pl-card::before {
+  content: '';
+  position: absolute;
+  inset: -12px -8px -8px;
+  border-radius: 8px;
+  background: var(--lt-surface);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.lt-pl-card:hover::before { opacity: 1; }
+
+.lt-pl-cover {
+  position: relative;
+  display: block;
+  /* The stack layers live INSIDE this 16:9 box. An earlier pass added 8px of
+     padding above it, which made every cover taller than YouTube's. */
+  aspect-ratio: 16 / 9;
+  margin-bottom: 12px;
+  text-decoration: none;
+}
+
+.lt-pl-layer {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 4px;
+  border-radius: 8px 8px 0 0;
+  background: var(--lt-stack);
+}
+.lt-pl-layer-2 { top: 0; width: 84%; opacity: 0.5; }
+.lt-pl-layer-1 { top: 4px; width: 92%; opacity: 0.8; }
+
+.lt-pl-thumb {
+  position: absolute;
+  inset: 8px 0 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--lt-surface);
+}
+.lt-pl-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.lt-pl-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font: 500 12px/12px Roboto, Arial, sans-serif;
+}
+.lt-pl-badge svg { width: 12px; height: 12px; fill: currentColor; display: block; }
+
+.lt-pl-meta { position: relative; }
+.lt-pl-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font: 500 16px/22px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  text-decoration: none;
+}
+/* Both metadata rows are 22px: 18px of line plus 4px, which is what makes the
+   metadata block exactly 66px with a one-line title. */
+.lt-pl-sub,
+.lt-pl-open {
+  margin-top: 4px;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+.lt-pl-open {
+  display: inline-block;
+  font-weight: 500;
+  text-decoration: none;
+}
+.lt-pl-open:hover { color: var(--lt-text); }
+
+.lt-pl-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+.lt-pl-actions .lt-card-action { position: static; }
+.lt-pl-card:hover .lt-card-action,
+.lt-pl-actions .lt-card-action:focus-visible { opacity: 1; }
+
+/* ------------------------------------------------------- playlist detail
+
+   Measured on a live /playlist?list=LL (dark, 1496px, guide open):
+
+     panel    fixed 360 wide at a 16px radius, 24px padding, sitting on the
+              cover blurred at 0.7 under a gradient; content 312 wide
+     title    700 28px/38px YouTube Sans
+     owner    500 14px/20px; stats 12px/18px at 70% white
+     buttons  two 40px pills at a 20px radius, 500 14px/40px, 4px apart —
+              Play all filled white on black text, Shuffle tonal at 10% white
+     list     starts 388px in, its contents inset a further 32px
+     row      200x112.5 cover at 8px radius, 8px to the text, 500 14px/20px
+              title clamped to 2 lines, 12px/18px metadata rows 2px apart,
+              16px below each row, 40x40 action at the top right
+
+   Watch Later is still served by YouTube's older numbered renderer; this is the
+   newer lockup, which is where the rest of YouTube already is. */
+
+.lt-pldetail {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+  /* Matches YouTube's 24px panel margin inside the browse container, given our
+     own 16px page padding. */
+  padding-inline: 8px;
+}
+
+.lt-plpanel {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 360px;
+  padding: 24px;
+  border-radius: 16px;
+  overflow: hidden;
+  /* Panel content sits on the blurred cover, so it is light in both themes. */
+  color: #fff;
+  background: #212121;
+  position: sticky;
+  top: 80px;
+}
+.lt-plpanel-bg {
+  position: absolute;
+  inset: -20%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(40px);
+  opacity: 0.7;
+}
+.lt-plpanel-wash {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.75));
+}
+.lt-plpanel-inner { position: relative; }
+
+.lt-plpanel-cover {
+  aspect-ratio: 16 / 9;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.lt-plpanel-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.lt-plpanel-title {
+  margin: 0;
+  font: 700 28px/38px 'YouTube Sans', Roboto, Arial, sans-serif;
+  color: #fff;
+}
+.lt-plpanel-owner {
+  margin-top: 16px;
+  font: 500 14px/20px Roboto, Arial, sans-serif;
+}
+.lt-plpanel-stats {
+  margin-top: 4px;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lt-plpanel-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+.lt-plbtn {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 20px;
+  font: 500 14px/40px Roboto, Arial, sans-serif;
+  cursor: pointer;
+}
+.lt-plbtn svg { width: 24px; height: 24px; fill: currentColor; }
+.lt-plbtn-filled { color: #0f0f0f; background: #fff; }
+.lt-plbtn-tonal { color: #fff; background: rgba(255, 255, 255, 0.1); }
+.lt-plbtn-tonal:hover { background: rgba(255, 255, 255, 0.2); }
+.lt-plbtn:disabled { opacity: 0.5; cursor: default; }
+
+.lt-plpanel-manage { display: flex; gap: 16px; }
+.lt-plpanel-link {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font: 500 12px/18px Roboto, Arial, sans-serif;
+  cursor: pointer;
+}
+.lt-plpanel-link:hover { color: #fff; }
+
+/* ------------------------------------------------------------- lockup rows */
+
+.lt-lockups {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* YouTube insets the list's contents 32px inside its column. */
+  padding: 8px 32px;
+}
+
+.lt-lockup {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.lt-lockup-cover {
+  flex: none;
+  width: 200px;
+  aspect-ratio: 16 / 9;
+  margin-right: 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--lt-surface);
+}
+.lt-lockup-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.lt-lockup-meta { flex: 1 1 auto; min-width: 0; padding-right: 48px; }
+
+.lt-lockup-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font: 500 14px/20px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  text-decoration: none;
+}
+.lt-lockup-row {
+  margin-top: 2px;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+
+/* Where YouTube's kebab sits: a 40x40 slot pinned to the row's top right. */
+.lt-lockup-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 20px;
+  padding: 0 12px;
+  font: 500 12px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.lt-lockup:hover .lt-lockup-action,
+.lt-lockup-action:focus-visible { opacity: 1; }
+.lt-lockup-action:hover { background: var(--lt-surface-hover); }
+
+@media (max-width: 1000px) {
+  .lt-pldetail { flex-direction: column; }
+  .lt-plpanel { position: static; width: 100%; max-width: 360px; }
+  .lt-lockups { padding-inline: 0; }
+}
+
+/* --------------------------------------------------------------- history
+
+   From a computed-style dump of a live /feed/history (dark, 1496px wide):
+
+     page     a centred block; ytd-browse centres it and the two-column
+              renderer is 1070 wide with a 1284 max-width
+     list     629 wide (the block minus the rail)
+     rail     441 wide, fixed
+     row      246x138 cover, 16px to the text, 16px above each row
+     title    400 18px/26px clamped to 2 lines, sharing its line with a 40px
+              action slot, and NO gap before the metadata
+     byline   one 12px/18px line
+     hover    inset -4px at a 4px radius
+
+   The centring is the part that had been wrong everywhere: these pages are not
+   left-aligned in the browse container, they are a centred column. */
+
+.lt-hist-page {
+  max-width: 1070px;
+  margin-inline: auto;
+}
+
+.lt-hist-layout {
+  display: flex;
+  align-items: flex-start;
+}
+
+.lt-hist-list { flex: 1 1 auto; min-width: 0; }
+
+.lt-hist-day {
+  margin: 24px 0 8px;
+  font: 500 20px/28px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+}
+.lt-hist-day:first-child { margin-top: 0; }
+
+.lt-histrow {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  margin-top: 16px;
+}
+/* YouTube's row wash sits 4px outside the row at a 4px radius, drawn behind the
+   content rather than as the row's own background. */
+.lt-histrow::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 4px;
+  background: var(--lt-surface);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.lt-histrow:hover::before { opacity: 1; }
+
+.lt-histrow-cover {
+  position: relative;
+  flex: none;
+  width: 246px;
+  height: 138px;
+  margin-right: 16px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--lt-surface);
+}
+.lt-histrow-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.lt-histrow-meta {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 600px;
+}
+
+.lt-histrow-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.lt-histrow-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-right: 8px;
+  /* 400, not 500 — the computed font shorthand carries no weight, which means
+     YouTube leaves these titles at normal weight. */
+  font: 400 18px/26px Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  text-decoration: none;
+}
+.lt-histrow-byline {
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+
+.lt-histrow-remove {
+  flex: none;
+  min-width: 40px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 10px;
+  font: 500 12px/1 Roboto, Arial, sans-serif;
+  color: var(--lt-text);
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.lt-histrow:hover .lt-histrow-remove,
+.lt-histrow-remove:focus-visible { opacity: 1; }
+.lt-histrow-remove:hover { background: var(--lt-surface-hover); }
+
+/* --------------------------------------------------------------- the rail */
+
+.lt-rail {
+  flex: none;
+  width: 441px;
+  box-sizing: border-box;
+  padding: 8px 28px 0;
+  position: sticky;
+  top: 80px;
+}
+
+/* 56px tall with YouTube's own margins, and an underline rather than a box. */
+.lt-rail-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  margin: 4px 16px 8px;
+  border-bottom: 1px solid var(--lt-border);
+}
+.lt-rail-search svg { width: 24px; height: 24px; flex: none; fill: var(--lt-text); }
+.lt-rail-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--lt-text);
+  font: 400 16px/24px Roboto, Arial, sans-serif;
+}
+.lt-rail-search input::placeholder { color: var(--lt-text-dim); }
+.lt-rail-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* Text buttons, not list rows: 40px tall, 20px radius, 500 14px/40px, sized to
+   their label and stacked 16px apart. */
+.lt-rail-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  margin-top: 16px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--lt-text);
+  font: 500 14px/40px Roboto, Arial, sans-serif;
+  cursor: pointer;
+}
+.lt-rail-action svg { width: 24px; height: 24px; flex: none; fill: currentColor; }
+.lt-rail-action:hover { background: var(--lt-surface); }
+.lt-rail-action:disabled { opacity: 0.4; cursor: default; background: transparent; }
+
+.lt-rail-note {
+  margin: 24px 0 0 16px;
+  font: 400 12px/18px Roboto, Arial, sans-serif;
+  color: var(--lt-text-dim);
+}
+
+/* The rail drops below the list before it starts squeezing the covers. */
+@media (max-width: 1000px) {
+  .lt-hist-layout { flex-direction: column; gap: 32px; }
+  .lt-rail { position: static; width: 100%; padding-inline: 0; }
 }
 
 /* ------------------------------------------------------- native-skin controls

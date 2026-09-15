@@ -8,6 +8,7 @@
 
 import { anchor, currentRoute, currentVideoId, generation, waitForAnchor } from '@/content/youtube-dom';
 import { getPlaylist } from '@/lib/playlists';
+import { readShuffle } from '@/lib/shuffle';
 import type { Playlist } from '@/types';
 
 const BAR_ID = 'localtube-queue';
@@ -53,8 +54,15 @@ export async function mountQueue(): Promise<void> {
     return;
   }
 
-  const index = playlist.videos.findIndex((v) => v.id === videoId);
-  const next = index >= 0 ? playlist.videos[index + 1] : undefined;
+  // A shuffle set by the playlist page reorders what "next" means, without
+  // touching the stored playlist — the saved order is the user's, not ours.
+  const order = readShuffle(playlist.id);
+  const sequence = order
+    ? (order.map((id) => playlist.videos.find((v) => v.id === id)).filter(Boolean) as typeof playlist.videos)
+    : playlist.videos;
+
+  const index = sequence.findIndex((v) => v.id === videoId);
+  const next = index >= 0 ? sequence[index + 1] : undefined;
   armAutoAdvance(playlist, next?.id);
 
   const gen = generation();
@@ -66,11 +74,11 @@ export async function mountQueue(): Promise<void> {
   bar.replaceChildren();
 
   const label = document.createElement('span');
-  const position = index >= 0 ? `${index + 1} of ${playlist.videos.length}` : 'not in this playlist';
+  const position = index >= 0 ? `${index + 1} of ${sequence.length}` : 'not in this playlist';
   label.append(
     document.createTextNode('Playing from '),
     Object.assign(document.createElement('strong'), { textContent: playlist.name }),
-    document.createTextNode(` · ${position}`),
+    document.createTextNode(` · ${position}${order ? ' · shuffled' : ''}`),
   );
   bar.appendChild(label);
 

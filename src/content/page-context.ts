@@ -42,6 +42,36 @@ export function readContext(): PageContext | null {
 }
 
 /**
+ * Wait for the context that describes THIS video.
+ *
+ * The MAIN-world bridge only overwrites its attribute once it can build a
+ * context for the current URL, so between an in-page navigation and that
+ * moment the attribute still describes the PREVIOUS video. `waitForContext`
+ * only asks for a channel id, so on a watch page it happily returns that stale
+ * value — which is how a history entry ended up wearing the last video's
+ * thumbnail. Anything keyed to a specific video must wait for its own id.
+ */
+export function waitForVideoContext(videoId: string, timeoutMs = 8000): Promise<PageContext | null> {
+  const matches = (context: PageContext | null): boolean => context?.videoId === videoId;
+  const immediate = readContext();
+  if (matches(immediate)) return Promise.resolve(immediate);
+
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      const context = readContext();
+      if (matches(context)) {
+        window.clearInterval(timer);
+        resolve(context);
+      } else if (Date.now() - started > timeoutMs) {
+        window.clearInterval(timer);
+        resolve(null);
+      }
+    }, 200);
+  });
+}
+
+/**
  * Wait for the page context to name a channel. YouTube populates its data
  * objects after navigation completes, so the first read on a fresh watch page
  * usually finds nothing.

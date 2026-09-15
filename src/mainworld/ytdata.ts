@@ -71,9 +71,23 @@ function readWatch(): Bridged | null {
   };
 }
 
+/** The channel id the current URL names, from the path or the canonical link.
+ *  Used to reject a stale payload, so it must come from the page, not the data. */
+function urlChannelId(): string | undefined {
+  const fromPath = /\/channel\/(UC[\w-]{22})/.exec(location.pathname)?.[1];
+  if (fromPath) return fromPath;
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href ?? '';
+  return /\/channel\/(UC[\w-]{22})/.exec(canonical)?.[1];
+}
+
 function readChannel(): Bridged | null {
   const meta = deepFind((window as any).ytInitialData, 'channelMetadataRenderer');
   if (!meta?.externalId) return null;
+  // Same staleness rule as the watch page: after an in-page navigation
+  // ytInitialData can still describe the channel you came FROM. Publishing that
+  // would put the previous channel's name and follow state on this page.
+  const wanted = urlChannelId();
+  if (wanted && meta.externalId !== wanted) return null;
   return {
     channelId: meta.externalId,
     channelTitle: meta.title,
@@ -282,13 +296,28 @@ function titleNear(el: Element, data: any): string | undefined {
   return textOf(deepFind(data, 'title'))?.trim();
 }
 
+/**
+ * The `data` object each control was last stamped from.
+ *
+ * A stamp cannot be a one-shot: YouTube REUSES its subscribe renderers across
+ * an in-page navigation, so a control skipped because it already carries a tag
+ * keeps the PREVIOUS video's channel — which is how the watch page's Subscribe
+ * came up already "Subscribed" until a full reload. Polymer swaps the whole
+ * `data` object when it re-renders an element, so comparing that reference is
+ * both the correct staleness test and a cheap one: no re-reading of hundreds of
+ * search-result rows on every pass.
+ */
+const stampedFrom = new WeakMap<Element, unknown>();
+
 function stampChannelIds(): void {
   if (!document.documentElement) return;
   for (const host of HOSTS) {
     for (const el of Array.from(document.querySelectorAll(host))) {
-      if ((el as HTMLElement).dataset.localtubeCid) continue;
+      const data = (el as any).data ?? (el as any).__data?.data;
+      if ((el as HTMLElement).dataset.localtubeCid && stampedFrom.get(el) === data) continue;
       const channels = channelsOf(el);
       if (channels.length === 0) continue;
+      stampedFrom.set(el, data);
       // Ids stay comma-joined for selectors and __ltDiag; the full detail —
       // name and avatar per channel — rides alongside as JSON.
       (el as HTMLElement).dataset.localtubeCid = channels.map((c) => c.id).join(',');

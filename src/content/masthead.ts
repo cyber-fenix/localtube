@@ -7,6 +7,7 @@
 
 import { anchor, generation, waitForAnchor } from '@/content/youtube-dom';
 import { nativeSkinOn } from '@/content/native-skin';
+import { singleFlight } from '@/content/single-flight';
 import { PATHS, icon } from '@/ui/icons';
 import { go, type View } from '@/ui/views';
 
@@ -75,7 +76,11 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') closeMenu();
 });
 
-export async function mountMasthead(): Promise<void> {
+/** Single-flighted: the id check happens before the awaits, so two concurrent
+ *  callers both pass it and both insert an avatar. */
+export const mountMasthead = singleFlight(mountMastheadOnce);
+
+async function mountMastheadOnce(): Promise<void> {
   if (!nativeSkinOn()) {
     document.getElementById(AVATAR_ID)?.remove();
     closeMenu();

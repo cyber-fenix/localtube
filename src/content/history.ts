@@ -10,7 +10,7 @@
 //    so clicking through a row of suggestions leaves one entry, not six.
 
 import { anchor, currentRoute, currentVideoId } from '@/content/youtube-dom';
-import { readContext, waitForContext } from '@/content/page-context';
+import { waitForVideoContext } from '@/content/page-context';
 import { historyEnabled, recordWatch } from '@/lib/history';
 import type { Video } from '@/types';
 
@@ -62,11 +62,15 @@ export async function mountHistory(): Promise<void> {
   // navigation finishes — and we have ten seconds of playback to wait for
   // anyway, so there is no hurry.
   //
+  // It must be the context for THIS video, not merely any context: until the
+  // bridge catches up it still describes the previous one, which is how an
+  // entry ended up with the last video's thumbnail and title.
+  //
   // Deliberately NOT guarded on generation(): loading a watch page fires
   // yt-navigate-finish, so the generation ticks while we are still on the very
   // video we are tracking. Comparing the video id is the check that means what
   // it says here. Guarding on the generation recorded nothing at all.
-  const context = (await waitForContext()) ?? readContext();
+  const context = await waitForVideoContext(videoId);
   if (currentVideoId() !== videoId) {
     tracking = null;
     return;
@@ -78,6 +82,8 @@ export async function mountHistory(): Promise<void> {
     channelId: context?.channelId ?? '',
     channelTitle: context?.channelTitle ?? '',
     published: context?.published ?? '',
+    // Falls back to the URL YouTube derives from the video id, which is right
+    // by construction — never to whatever the bridge last published.
     thumbnail: context?.thumbnail ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
   };
 

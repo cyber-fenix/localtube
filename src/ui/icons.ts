@@ -18,6 +18,13 @@ export const PATHS = {
     'M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z',
   save: 'M14 10H2v2h12v-2zm0-4H2v2h12V6zM2 16h8v-2H2v2zm19-2v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4z',
   play: 'M8 5v14l11-7z',
+  // The three used by the History rail, in YouTube's own drawing.
+  search:
+    'M20.87 20.17l-5.59-5.59C16.35 13.35 17 11.75 17 10c0-3.87-3.13-7-7-7s-7 3.13-7 7 3.13 7 7 7c1.75 0 3.35-.65 4.58-1.71l5.59 5.59.7-.71zM10 16c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z',
+  trash: 'M11 17H9V8h2v9Zm4-9h-2v9h2V8Zm4-4v1h-1v16H6V5H5V4h4V3h6v1h4Zm-2 1H7v15h10V5Z',
+  pause: 'M6 4h3.5v16H6V4Zm8.5 0H18v16h-3.5V4Z',
+  shuffle:
+    'M17 4v2h2.586l-4.043 4.043 1.414 1.414L21 7.414V10h2V4h-6ZM3 6h4.586l3.457 3.457 1.414-1.414L8.414 4H3v2Zm14.543 7.543-1.414 1.414L19.586 18H17v2h6v-6h-2v2.586l-3.457-3.043ZM4.707 19.707 20.121 4.293l-1.414-1.414L3.293 18.293l1.414 1.414Z',
 } as const;
 
 /** Swap an existing icon's path in place, so toggling does not rebuild the node. */
