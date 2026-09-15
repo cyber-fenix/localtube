@@ -223,6 +223,18 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
       return;
     }
 
+    // The shelf is rebuilt from scratch below like everything else in `body`,
+    // which resets its scrollLeft to 0 — including on a background repaint
+    // (durations/Shorts classification arriving, another channel's feed
+    // landing) that has nothing to do with what's on screen. Scrolling the
+    // shelf right as one of those lands is what "snaps back to the first
+    // Short" for no visible reason. Carried across the rebuild instead of
+    // fixed by not rebuilding: the shelf's own contents can legitimately
+    // change underneath it (a Short just reclassified, one just dropped for
+    // having no real thumbnail), so keeping the same nodes isn't safe — only
+    // where the user had scrolled to is worth preserving.
+    const shortsScroll = body.querySelector('.lt-shorts-row')?.scrollLeft ?? 0;
+
     const parts: HTMLElement[] = [];
     if (shorts.length > 0) parts.push(shortsShelf(shorts.slice(0, SHORTS_SHELF)));
     if (rest.length > 0)
@@ -233,6 +245,10 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
         }),
       );
     body.replaceChildren(...parts);
+    if (shortsScroll > 0) {
+      const newRow = body.querySelector<HTMLElement>('.lt-shorts-row');
+      if (newRow) newRow.scrollLeft = shortsScroll;
+    }
     if (rest.length > shown) {
       const more = document.createElement('button');
       more.type = 'button';

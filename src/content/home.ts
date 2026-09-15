@@ -50,8 +50,19 @@ export function unmountHome(): void {
 // LocalTube changes its own view with pushState, which fires no navigation
 // event. Re-render here, and tell the URL watcher the change is already
 // handled so its poll does not render a second time 400ms later.
+//
+// A real page navigation starts scrolled at the top; pushState does not, so
+// switching from a feed you had scrolled 900px down straight to History left
+// History's own title and everything above roughly y=900 off-screen — "the
+// title isn't showing", though it was rendering fine, just scrolled past.
+// VIEW_CHANGED only ever fires from go() (ui/views.ts), i.e. an actual
+// switch to a different view, never from rerender() refreshing the one
+// already on screen — that distinction is what keeps this from also
+// resetting the scroll position feedView's own repaint fix (paint()
+// preserving the Shorts shelf's scrollLeft) was written to protect.
 window.addEventListener(VIEW_CHANGED, () => {
   markUrlHandled();
+  window.scrollTo(0, 0);
   void renderHome();
 });
 

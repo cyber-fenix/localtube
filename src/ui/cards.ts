@@ -276,12 +276,46 @@ export function shortsShelf(videos: Video[]): HTMLElement {
     const thumb = document.createElement('div');
     thumb.className = 'lt-short-thumb';
     const img = document.createElement('img');
-    img.loading = 'lazy';
+    // NOT lazy: measured live (2026-09-14) that most "missing" Shorts
+    // thumbnails were never actually broken — they were sitting unloaded to
+    // the right of the shelf's horizontal scroll, which `loading="lazy"`
+    // never resolves unless the user drags that one row sideways. The shelf
+    // is capped at SHORTS_SHELF (24) images sitting at the top of the page,
+    // not the long vertical grid below it, so there is no real cost to
+    // fetching them all up front the way the rest of this shelf already
+    // does not scroll-gate.
     img.alt = '';
     // A Short's cover is vertical; the feed only ever gave us the 16:9 frame,
-    // so ask for the portrait one and fall back to what we have.
+    // so ask for the portrait one and fall back to what we have. Listeners
+    // go on BEFORE `src` is set, and a second one covers the fallback itself
+    // failing — logged rather than left silent, so a genuine broken
+    // thumbnail (as opposed to the lazy-load timing above) is diagnosable
+    // from the console instead of just "looks blank".
+    img.addEventListener(
+      'error',
+      () => {
+        console.warn(
+          '[LocalTube] Short thumbnail (oardefault) failed, falling back',
+          video.id,
+          video.title,
+        );
+        img.addEventListener(
+          'error',
+          () => {
+            console.warn(
+              '[LocalTube] Short thumbnail fallback ALSO failed',
+              video.id,
+              video.title,
+              video.thumbnail,
+            );
+          },
+          { once: true },
+        );
+        img.src = video.thumbnail;
+      },
+      { once: true },
+    );
     img.src = `https://i.ytimg.com/vi/${video.id}/oardefault.jpg`;
-    img.addEventListener('error', () => { img.src = video.thumbnail; }, { once: true });
     thumb.appendChild(img);
     link.appendChild(thumb);
 
