@@ -15,6 +15,18 @@ export interface Video {
    * badge for something you have watched and nothing for anything else.
    */
   duration?: number;
+  /**
+   * True for a Short, false for an ordinary video, absent when unknown.
+   *
+   * The Atom feed carries Shorts and ordinary uploads in one list with nothing
+   * to tell them apart (verified live: two Shorts sat among the 15 entries of
+   * a channel feed), so this is filled in from two places — a channel page's
+   * own tabs, which separate them for us at no cost, and the Innertube player
+   * lookup. Absent means "not classified yet", and an unclassified video is
+   * always treated as an ordinary one: nothing ever disappears because a
+   * classification has not arrived.
+   */
+  isShort?: boolean;
   /** Epoch ms, set when the video is saved to a playlist. */
   addedAt?: number;
 }
@@ -81,6 +93,8 @@ export interface Settings {
   recordHistory: boolean;
   /** Remember where you stopped and pick the video back up there. */
   resumePlayback: boolean;
+  /** Leave Shorts out of the feed entirely, instead of shelving them apart. */
+  hideShorts: boolean;
 }
 
 /** Everything a backup contains. Bump `version` only with a migration. */
@@ -102,6 +116,15 @@ export interface FeedCacheEntry {
   videos: Video[];
   /** Set when the last fetch failed (deleted channel, network error). */
   error?: string;
+  /**
+   * True once the user has explicitly loaded this channel's older videos.
+   *
+   * It raises this channel's cap from CHANNEL_VIDEO_LIMIT to
+   * DEEP_CHANNEL_VIDEO_LIMIT. Without the flag the next routine feed refresh
+   * would merge and trim straight back to the ordinary cap, throwing away
+   * everything the deep load fetched within the TTL.
+   */
+  deep?: boolean;
 }
 
 export type FeedCache = Record<string, FeedCacheEntry>;

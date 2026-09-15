@@ -2,7 +2,10 @@
 // mounts inside YouTube's home page; nothing here knows about YouTube's DOM.
 
 import { writesAllowed } from '@/content/account';
-import { loadFeed, type FeedStatus } from '@/lib/feed';
+import { flashToast } from '@/content/toast';
+import { loadFeed, mergeCache, type FeedStatus } from '@/lib/feed';
+import { backfillVideoDetails } from '@/lib/video-details';
+import { loadChannelHistory } from '@/lib/deep-history';
 import { deletePlaylist, getPlaylist, listPlaylists, removeFromPlaylist, renamePlaylist, createPlaylist } from '@/lib/playlists';
 import { listProgress, watchedFraction } from '@/lib/progress';
 import { clearHistory, historyEnabled, listHistory, removeFromHistory, setHistoryEnabled } from '@/lib/history';
@@ -19,7 +22,7 @@ import {
   durationBadge,
   progressBar,
   progressFor,
-  watchHref, emptyState, formatViews, kebab, timeAgo, videoGrid } from '@/ui/cards';
+  watchHref, emptyState, formatViews, kebab, shortsShelf, timeAgo, videoGrid } from '@/ui/cards';
 import { PATHS, icon } from '@/ui/icons';
 import { clearShuffle, shuffled, writeShuffle } from '@/lib/shuffle';
 import type { HistoryEntry, Playlist, ProgressEntry, Video } from '@/types';
@@ -37,6 +40,10 @@ export type View =
   | { name: 'history' };
 
 const PAGE_SIZE = 60;
+
+/** How many Shorts the shelf holds. It is one horizontal row, so this is a
+ *  scroll length, not a page — the videos below it are the point of the page. */
+const SHORTS_SHELF = 24;
 
 export const viewHash = (view: View): string =>
   view.name === 'playlist' ? `#localtube=playlist:${view.id}` : `#localtube=${view.name}`;
@@ -89,9 +96,10 @@ function localOnlyNote(): HTMLElement {
 export async function feedView(root: HTMLElement, token: () => boolean): Promise<void> {
   // The avatar YouTube shows beside each title. We have one only for channels
   // you follow — which, on a feed built from your follows, is all of them.
-  const [{ subscriptions }, progress] = await Promise.all([getData(), listProgress()]);
+  const [{ subscriptions, settings }, progress] = await Promise.all([getData(), listProgress()]);
   const avatarFor = (video: Video): string | undefined => subscriptions[video.channelId]?.avatar;
   const watched = progressFor(progress);
+  const hideShorts = settings.hideShorts;
 
   const status = document.createElement('span');
   status.className = 'lt-status';
@@ -111,17 +119,25 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
   const note = localOnlyNote();
   let attached = false;
   const attach = (): void => {
-    if (attached) return;
+    // The token matters here exactly as much as in paint: a write landing a
+    // few seconds into the first paint re-runs the route, which starts a
+    // SECOND feedView against the same root. paint() refuses to paint stale,
+    // but if this stale instance's attach then ran, it would replaceChildren
+    // its never-painted EMPTY body over the live grid — the feed "vanished
+    // seconds after first paint" until a full refresh.
+    if (attached || !token()) return;
     attached = true;
     root.replaceChildren(bar, body, note);
   };
 
   let shown = PAGE_SIZE;
   let latest: Video[] = [];
+  let latestStatus: FeedStatus = { refreshing: 0, done: 0, failed: [] };
 
   const paint = (videos: Video[], feedStatus: FeedStatus): void => {
     if (!token()) return;
     latest = videos;
+    latestStatus = feedStatus;
     status.textContent =
       feedStatus.done < feedStatus.refreshing
         ? `Updating ${feedStatus.done}/${feedStatus.refreshing} channels…`
@@ -129,23 +145,39 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
           ? `${feedStatus.failed.length} channel${feedStatus.failed.length === 1 ? '' : 's'} could not be loaded`
           : '';
 
-    if (videos.length === 0) {
+    // Anything not yet classified is treated as an ordinary video, so a
+    // classification that has not arrived can never make a video vanish.
+    const shorts = hideShorts ? [] : videos.filter((video) => video.isShort === true);
+    const rest = videos.filter((video) => video.isShort !== true);
+
+    if (rest.length === 0 && shorts.length === 0) {
       body.replaceChildren(
-        emptyState(
-          'Your feed is empty',
-          'Follow a few channels with the LocalTube button on any channel or video page, or import your existing subscriptions from a Google Takeout file in the extension popup.',
-          { label: 'View subscriptions', onClick: () => go({ name: 'subscriptions' }) },
-        ),
+        videos.length > 0 && hideShorts
+          ? emptyState(
+              'Only Shorts to show',
+              'Every video in your feed right now is a Short, and Shorts are hidden. Turn them back on in the extension popup to see them here.',
+            )
+          : emptyState(
+              'Your feed is empty',
+              'Follow a few channels with the LocalTube button on any channel or video page, or import your existing subscriptions from a Google Takeout file in the extension popup.',
+              { label: 'View subscriptions', onClick: () => go({ name: 'subscriptions' }) },
+            ),
       );
+      attach();
       return;
     }
 
-    const grid = videoGrid(videos.slice(0, shown), undefined, {
-      avatar: avatarFor,
-      progress: watched,
-    });
-    body.replaceChildren(grid);
-    if (videos.length > shown) {
+    const parts: HTMLElement[] = [];
+    if (shorts.length > 0) parts.push(shortsShelf(shorts.slice(0, SHORTS_SHELF)));
+    if (rest.length > 0)
+      parts.push(
+        videoGrid(rest.slice(0, shown), undefined, {
+          avatar: avatarFor,
+          progress: watched,
+        }),
+      );
+    body.replaceChildren(...parts);
+    if (rest.length > shown) {
       const more = document.createElement('button');
       more.type = 'button';
       more.className = 'lt-btn';
@@ -171,6 +203,27 @@ export async function feedView(root: HTMLElement, token: () => boolean): Promise
   await loadFeed(paint);
   // loadFeed always paints at least once, but never leave the view unattached.
   attach();
+
+  // Then fill in what the feed itself cannot say: lengths, and which of these
+  // are Shorts. This writes the feed cache — NOT the data key — so it cannot
+  // re-run the route; the repaint has to come from here, throttled the way
+  // loadFeed throttles its own.
+  if (!token()) return;
+  const cache = await getFeedCache();
+  const channelIds = Object.keys(subscriptions);
+  let lastPaint = 0;
+  const repaint = (): void => {
+    if (!token() || Date.now() - lastPaint < 600) return;
+    lastPaint = Date.now();
+    // Same status as the last paint: a details pass says nothing about
+            // whether a channel's feed loaded, and must not clear that notice.
+            paint(mergeCache(cache, channelIds), latestStatus);
+  };
+  const found = await backfillVideoDetails(cache, channelIds, repaint);
+  if (found > 0 && token()) {
+    lastPaint = 0;
+    repaint();
+  }
 }
 
 /* -------------------------------------------------------- subscriptions */
@@ -264,7 +317,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
       meta.textContent = `Feed unavailable (${entry.error}) — the channel may have been deleted`;
     } else if (entry && entry.videos.length > 0) {
       const latest = entry.videos[0];
-      meta.textContent = `${entry.videos.length} recent videos • latest ${timeAgo(latest.published)}`;
+      meta.textContent = `${entry.videos.length} ${entry.deep ? 'videos' : 'recent videos'} • latest ${timeAgo(latest.published)}`;
     } else {
       meta.textContent = entry ? 'No recent uploads' : 'Not loaded yet';
     }
@@ -276,7 +329,7 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
     const feedNote = entry?.error
       ? `Feed unavailable (${entry.error}) — the channel may have been deleted`
       : entry && entry.videos.length > 0
-        ? `${entry.videos.length} recent videos • latest ${timeAgo(entry.videos[0].published)}`
+        ? `${entry.videos.length} ${entry.deep ? 'videos' : 'recent videos'} • latest ${timeAgo(entry.videos[0].published)}`
         : entry
           ? 'No recent uploads'
           : 'Not loaded yet';
@@ -301,9 +354,43 @@ export async function subscriptionsView(root: HTMLElement, rerender: () => void)
         rerender();
       });
 
+      // Older videos, on request only. The Atom feed carries 15, so without
+      // this a channel you follow but never open contributes 15 videos and no
+      // more — and this is far too expensive (~1 MB per 30 videos) to ever
+      // run on its own. See lib/deep-history.ts.
+      const deepen = document.createElement('button');
+      deepen.type = 'button';
+      deepen.className = 'lt-channel-btn lt-channel-btn-quiet';
+      const deepened = entry?.deep === true;
+      deepen.textContent = deepened ? 'Load more older videos' : 'Load older videos';
+      deepen.title =
+        'Ask YouTube for this channel\u2019s earlier uploads and keep them in this browser. Uses a few MB of traffic.';
+      deepen.addEventListener('click', async () => {
+        deepen.disabled = true;
+        const restore = deepen.textContent;
+        deepen.textContent = 'Loading…';
+        try {
+          const result = await loadChannelHistory(channel.id, (loaded) => {
+            deepen.textContent = `Loading… ${loaded}`;
+          });
+          if (result.rateLimited) flashToast('YouTube is rate-limiting LocalTube — try again later');
+          else if (result.added > 0)
+            flashToast(
+              `Added ${result.added} older video${result.added === 1 ? '' : 's'} from ${channel.title}`,
+            );
+          else flashToast(result.complete ? 'Nothing older to load' : 'No new videos found');
+          rerender();
+        } catch {
+          deepen.textContent = restore;
+          flashToast('Could not load older videos');
+        } finally {
+          deepen.disabled = false;
+        }
+      });
+
       const buttons = document.createElement('div');
       buttons.className = 'lt-channel-buttons';
-      buttons.appendChild(remove);
+      buttons.append(remove, deepen);
       row.append(avatarLink, info, buttons);
     } else {
       row.append(avatarLink, info);

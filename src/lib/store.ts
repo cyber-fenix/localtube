@@ -59,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   nativeSkin: true,
   recordHistory: true,
   resumePlayback: true,
+  hideShorts: false,
 };
 
 /** How many watched videos History keeps. Old entries fall off the end rather

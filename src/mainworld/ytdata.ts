@@ -273,6 +273,16 @@ const HOSTS = [
   'ytd-channel-renderer',
   'ytd-grid-channel-renderer',
   'ytd-channel-about-metadata-renderer',
+  // The Shorts player, which carries NONE of the ytd-* names above.
+  //
+  // Tag the BAR, not the button. YouTube serves at least two shapes of that
+  // button — `yt-subscribe-button-view-model` in one variant, a bare
+  // `button-view-model` in another (both seen live on 2026-09-11, on the same
+  // URL in different browsers) — and `button-view-model` is far too generic to
+  // tag: it is every button on YouTube. The bar is the one element common to
+  // both, and its own data carries the channel id on the avatar's browse
+  // endpoint, which channelsOf's deepFind already reaches.
+  'yt-reel-channel-bar-view-model',
 ];
 
 const CHANNEL_ID = /UC[\w-]{22}/g;
@@ -364,6 +374,17 @@ function absoluteUrl(url: string | undefined | null): string | undefined {
 function avatarNear(el: Element, data: any): string | undefined {
   const own = largestThumb(data);
   if (own) return absoluteUrl(own);
+  // The Shorts player keeps the avatar on the channel bar around the button,
+  // under `image.sources` rather than the `thumbnails` largestThumb looks for.
+  const reelBar = el.closest('yt-reel-channel-bar-view-model');
+  if (reelBar) {
+    const barData = (reelBar as any).data ?? (reelBar as any).__data?.data;
+    const source =
+      barData?.decoratedAvatarViewModel?.decoratedAvatarViewModel?.avatar?.avatarViewModel?.image
+        ?.sources?.[0]?.url;
+    if (typeof source === 'string') return absoluteUrl(source);
+  }
+
   const scope = el.closest('#owner, ytd-channel-renderer, ytd-grid-channel-renderer');
   if (!scope) return undefined;
   const owner = scope.querySelector('ytd-video-owner-renderer') ?? scope;
@@ -485,6 +506,9 @@ interface StampedVideo {
   /** Relative publish text: "4mo ago". */
   p?: string;
   th?: string;
+  /** 1 for a Short, 0 for an ordinary video. Absent means the card did not
+   *  say, which the isolated world reads as "not classified". */
+  s?: 0 | 1;
 }
 
 function fromLockup(lockup: any): StampedVideo | null {
@@ -503,6 +527,11 @@ function fromLockup(lockup: any): StampedVideo | null {
 
   return {
     i: id,
+    // A lockup is never a Short: verified live on a channel's Videos tab
+    // (30 cards, every one LOCKUP_CONTENT_TYPE_VIDEO), while the Shorts tab
+    // and the Shorts shelf use shortsLockupViewModel instead. So this card
+    // being here is itself the answer, at no cost.
+    s: 0,
     t: lockup.metadata?.lockupMetadataViewModel?.title?.content,
     d: typeof badge?.text === 'string' ? badge.text : undefined,
     // "524K views" style figure first, relative date second — the order
@@ -510,6 +539,33 @@ function fromLockup(lockup: any): StampedVideo | null {
     v: rows[0],
     p: rows[1],
     th: absoluteUrl(thumb?.image?.sources?.[0]?.url),
+  };
+}
+
+/**
+ * A Shorts card, which is a different renderer entirely.
+ *
+ * Verified live on a channel's Shorts tab (2026-09-10): the host is the same
+ * ytd-rich-item-renderer, but the content is `shortsLockupViewModel`, whose
+ * shape shares nothing with a lockup — the id hangs off the tap endpoint, the
+ * title and view count off `overlayMetadata`, and there is no duration and no
+ * publish date anywhere on the card.
+ *
+ * That missing date is why a Short harvested here usually cannot enter the
+ * feed as a new video (see content/harvest.ts: a video with no date cannot be
+ * placed in a reverse-chronological list). Its real value is the flag: the
+ * same Short almost certainly arrived through the Atom feed already, where it
+ * is indistinguishable from an upload, and this says which one it is.
+ */
+function fromShortsLockup(shorts: any): StampedVideo | null {
+  const id = shorts?.onTap?.innertubeCommand?.reelWatchEndpoint?.videoId;
+  if (typeof id !== 'string' || id.length === 0) return null;
+  return {
+    i: id,
+    s: 1,
+    t: shorts.overlayMetadata?.primaryText?.content,
+    v: shorts.overlayMetadata?.secondaryText?.content,
+    th: absoluteUrl(shorts.thumbnailViewModel?.thumbnailViewModel?.image?.sources?.[0]?.url),
   };
 }
 
@@ -541,7 +597,9 @@ function stampVideos(): void {
       if ((el as HTMLElement).dataset.ltVideo && stampedVideoFrom.get(el) === data) continue;
       const video = data.content?.lockupViewModel
         ? fromLockup(data.content.lockupViewModel)
-        : fromGridVideo(data);
+        : data.content?.shortsLockupViewModel
+          ? fromShortsLockup(data.content.shortsLockupViewModel)
+          : fromGridVideo(data);
       if (!video) continue;
       stampedVideoFrom.set(el, data);
       (el as HTMLElement).dataset.ltVideo = JSON.stringify(video);

@@ -119,6 +119,16 @@ export const HIDE_SELECTORS: string[] = [
   // rules. We mount into the surrounding strip, which stays visible.
   'ytd-channel-renderer #subscribe-button',
   'ytd-grid-channel-renderer #subscribe',
+  // The Shorts player. Its Subscribe shares no name with any of the above,
+  // which is why it survived while every other Subscribe was replaced — and
+  // it comes in two shapes: `yt-subscribe-button-view-model` in one variant,
+  // a bare `button-view-model` in another (both seen live, same URL, 2026-09-11).
+  // So target the SLOT's children by exclusion rather than by renderer name.
+  // Ours is the exception, because that slot is where it mounts — hiding the
+  // slot itself would take our button with it (see the channel-header lesson
+  // above). The bar's Join lives in a slot of its own and is left to the
+  // sponsor-button rules below.
+  'yt-reel-channel-bar-view-model .ytReelChannelBarViewModelReelSubscribeButton > *:not(.lt-follow-anywhere)',
 
   // Watch page and content shelves. The channel header's Join is covered by the
   // flexible-actions rule above.

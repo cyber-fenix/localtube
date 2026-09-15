@@ -25,8 +25,34 @@ const STYLE_ID = 'localtube-account-bar-style';
 /** Google Takeout pre-selected to YouTube — the only outward link the bar has. */
 const TAKEOUT_URL = 'https://takeout.google.com/takeout/custom/youtube';
 
-/** The user closed it: leave it off until the account state next changes. */
-let dismissed = false;
+/**
+ * The user closed it: leave it off until the account state next changes.
+ *
+ * In sessionStorage, not a module variable. A module variable survives SPA
+ * navigation but dies on a reload, so the bar came back on every fresh page
+ * load — a nag schedule, which is exactly what this is documented not to be.
+ * sessionStorage is the right lifetime too: it belongs to this tab's session,
+ * never to the account or a backup.
+ */
+const DISMISS_KEY = 'localtube_bar_dismissed';
+
+function isDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(DISMISS_KEY) === '1';
+  } catch {
+    // Storage can be blocked outright; the bar showing is the safe failure.
+    return false;
+  }
+}
+
+function setDismissed(value: boolean): void {
+  try {
+    if (value) sessionStorage.setItem(DISMISS_KEY, '1');
+    else sessionStorage.removeItem(DISMISS_KEY);
+  } catch {
+    // Nothing to do: without storage the bar simply returns on the next load.
+  }
+}
 
 const BAR_STYLE = `
 #${BAR_ID} {
@@ -45,19 +71,42 @@ const BAR_STYLE = `
   box-sizing: border-box;
   font: 500 13px/20px Roboto, Arial, sans-serif;
 }
-html:not([dark]) #${BAR_ID} { background: #fef7e0; color: #1b1b1b; border-bottom: 1px solid #ecd48a; }
-html[dark] #${BAR_ID} { background: #3a3416; color: #f1f1f1; border-bottom: 1px solid #59502a; }
-#${BAR_ID} .lt-bar-brand { font-weight: 700; flex-none: 0; }
+/* Light is the base; dark is applied by LocalTube's OWN theme attribute,
+   with YouTube's own dark attribute kept as the first-frame fallback.
+   Keying only off
+   html[dark] would leave a light-yellow bar on a dark page in exactly the
+   case content/theme.ts exists for: YouTube dropping or renaming that
+   attribute, where the theme is detected from the computed background
+   instead. */
+#${BAR_ID} { background: #fef7e0; color: #1b1b1b; border-bottom: 1px solid #ecd48a; }
+html[dark] #${BAR_ID},
+html[data-localtube-theme='dark'] #${BAR_ID} {
+  background: #3a3416;
+  color: #f1f1f1;
+  border-bottom: 1px solid #59502a;
+}
+html[data-localtube-theme='light'] #${BAR_ID} {
+  background: #fef7e0;
+  color: #1b1b1b;
+  border-bottom: 1px solid #ecd48a;
+}
+#${BAR_ID} .lt-bar-brand { font-weight: 700; flex: none; }
 #${BAR_ID} a {
   color: inherit;
   text-decoration: underline;
   cursor: pointer;
-  flex-none: 0;
 }
 #${BAR_ID} .lt-bar-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Narrow windows lose the brand word, never the instruction: the sentence is
+   the whole reason the bar exists, and it is what gets ellipsised first if
+   the order is left alone. */
+@media (max-width: 700px) {
+  #${BAR_ID} .lt-bar-brand { display: none; }
+  #${BAR_ID} { gap: 8px; padding: 0 8px; }
+}
 #${BAR_ID} .lt-bar-close {
   margin-left: auto;
-  flex-none: 0;
+  flex: none;
   background: none;
   border: 0;
   color: inherit;
@@ -96,9 +145,9 @@ export function syncAccountBar(): void {
   const state = signedIn();
   // A dismissed bar re-arms as soon as the account actually changes — so it
   // shows for a fresh sign-in, but never re-nags about the same one.
-  if (state !== true) dismissed = false;
+  if (state !== true && isDismissed()) setDismissed(false);
 
-  const on = state === true && !dismissed;
+  const on = state === true && !isDismissed();
   const html = document.documentElement;
   const existing = document.getElementById(BAR_ID);
 
@@ -128,8 +177,12 @@ export function syncAccountBar(): void {
   takeout.href = TAKEOUT_URL;
   takeout.target = '_blank';
   takeout.rel = 'noopener';
-  takeout.textContent = 'Export your subscriptions from Google Takeout first';
+  takeout.textContent = 'Export your subscriptions from Google Takeout';
   text.appendChild(takeout);
+  // The export is only half the job, and the half that is easy to leave
+  // unfinished: the file does nothing until it is imported. A content script
+  // cannot open the popup for them, so the sentence says where it is.
+  text.append(', then import the file from the LocalTube popup.');
   bar.appendChild(text);
 
   const close = document.createElement('button');
@@ -139,7 +192,7 @@ export function syncAccountBar(): void {
   close.title = 'Dismiss for now';
   close.setAttribute('aria-label', 'Dismiss for now');
   close.addEventListener('click', () => {
-    dismissed = true;
+    setDismissed(true);
     syncAccountBar();
   });
   bar.appendChild(close);

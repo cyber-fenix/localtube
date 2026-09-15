@@ -18,7 +18,10 @@
 
 import { currentRoute } from '@/content/youtube-dom';
 import { readContext } from '@/content/page-context';
-import { CHANNEL_VIDEO_LIMIT, mergeVideos } from '@/lib/feed';
+import { mergeVideos, videoLimitFor } from '@/lib/feed';
+import { parseAge, parseDuration, parseViews } from '@/lib/parse';
+
+export { parseAge, parseDuration, parseViews };
 import { getData, getFeedCache, putFeedCache } from '@/lib/store';
 import type { Video } from '@/types';
 
@@ -30,55 +33,8 @@ interface StampedVideo {
   v?: string;
   p?: string;
   th?: string;
-}
-
-/** "1:50" / "16:40" / "1:02:28" → seconds. */
-export function parseDuration(text?: string): number | undefined {
-  if (!text) return undefined;
-  const parts = text.trim().split(':').map((n) => Number(n));
-  if (parts.length < 2 || parts.length > 3 || parts.some((n) => !Number.isFinite(n))) return undefined;
-  const seconds = parts.reduce((total, part) => total * 60 + part, 0);
-  return seconds > 0 ? seconds : undefined;
-}
-
-/** "524K" / "1.2M views" / "7,712 views" → a number. */
-export function parseViews(text?: string): number | undefined {
-  if (!text) return undefined;
-  const match = /([\d.,]+)\s*([KMB])?/i.exec(text.replace(/\s/g, ''));
-  if (!match) return undefined;
-  const value = Number(match[1].replace(/,/g, ''));
-  if (!Number.isFinite(value)) return undefined;
-  const scale = { k: 1e3, m: 1e6, b: 1e9 }[(match[2] ?? '').toLowerCase()] ?? 1;
-  return Math.round(value * scale);
-}
-
-/**
- * "4mo ago" / "3 days ago" / "1y ago" → an ISO date.
- *
- * An approximation, and knowingly so: the channel page states ages, not dates.
- * It is resolved to an absolute timestamp here, at harvest time, so it does not
- * drift afterwards, and the Atom feed's exact date always wins where both exist
- * (see mergeVideos). Its only job is to sort a video roughly correctly among
- * others in the feed.
- */
-export function parseAge(text?: string): string | undefined {
-  if (!text) return undefined;
-  const match = /(\d+)\s*(mo|[smhdwy])[a-z]*\s*ago/i.exec(text.trim());
-  if (!match) return undefined;
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
-  const ms: Record<string, number> = {
-    s: 1000,
-    m: 60_000,
-    h: 3_600_000,
-    d: 86_400_000,
-    w: 604_800_000,
-    mo: 2_592_000_000,
-    y: 31_536_000_000,
-  };
-  const span = ms[unit];
-  if (!span || !Number.isFinite(amount)) return undefined;
-  return new Date(Date.now() - amount * span).toISOString();
+  /** 1 for a Short, 0 for an ordinary video; absent when the card did not say. */
+  s?: 0 | 1;
 }
 
 function toVideo(stamped: StampedVideo, channelId: string, channelTitle: string): Video | null {
@@ -96,6 +52,7 @@ function toVideo(stamped: StampedVideo, channelId: string, channelTitle: string)
     thumbnail: stamped.th || `https://i.ytimg.com/vi/${stamped.i}/hqdefault.jpg`,
     views: parseViews(stamped.v),
     duration: parseDuration(stamped.d),
+    isShort: stamped.s === undefined ? undefined : stamped.s === 1,
   };
 }
 
@@ -138,22 +95,46 @@ export async function harvestChannelVideos(): Promise<number> {
   const videos = stamped
     .map((item) => toVideo(item, channelId, context.channelTitle ?? subscription.title))
     .filter((video): video is Video => video !== null);
-  if (videos.length === 0) return 0;
+
+  // Which tab a card came from is itself a classification, and a free one.
+  // Kept separately from `videos` because a Shorts card carries no publish
+  // date, so it cannot become a feed entry on its own — but the same Short
+  // has almost certainly already arrived through the Atom feed, where nothing
+  // distinguishes it from an upload, and this is what tells them apart.
+  const marks = new Map<string, boolean>();
+  for (const item of stamped)
+    if (item.i && item.s !== undefined) marks.set(item.i, item.s === 1);
+
+  if (videos.length === 0 && marks.size === 0) return 0;
 
   const cache = await getFeedCache();
   const before = cache[channelId]?.videos ?? [];
   // Not authoritative: the feed's exact dates and view counts win, and only the
   // durations and the videos the feed never carried are taken from here.
-  const merged = mergeVideos(before, videos, false);
-  if (merged.length === before.length && before.every((video) => video.duration)) {
+  const merged = mergeVideos(before, videos, false, videoLimitFor(cache[channelId]));
+
+  let marked = 0;
+  for (const video of merged) {
+    const isShort = marks.get(video.id);
+    if (isShort !== undefined && video.isShort !== isShort) {
+      video.isShort = isShort;
+      marked++;
+    }
+  }
+
+  if (
+    marked === 0 &&
+    merged.length === before.length &&
+    before.every((video) => video.duration || video.isShort)
+  ) {
     lastWrite = { channelId, count: stamped.length };
     return 0;
   }
 
   cache[channelId] = {
+    ...cache[channelId],
     fetchedAt: cache[channelId]?.fetchedAt ?? 0,
-    videos: merged.slice(0, CHANNEL_VIDEO_LIMIT),
-    error: cache[channelId]?.error,
+    videos: merged,
   };
   await putFeedCache(cache, Object.keys(subscriptions));
   lastWrite = { channelId, count: stamped.length };

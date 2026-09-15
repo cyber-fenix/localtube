@@ -63,13 +63,29 @@ export async function subscribe(channel: ChannelDetails): Promise<void> {
  */
 export async function noteChannelDetails(channel: ChannelDetails): Promise<void> {
   if (!channel.handle && !channel.subscribers && !channel.avatar) return;
+
+  // Only write when something would actually change. Every storage write
+  // re-runs the route (onDataChanged), and this is called on EVERY watch and
+  // channel page visit — an unconditional write rebuilt the feed grid under
+  // the user's cursor, visible as the feed "rapidly refreshing".
+  const existing = (await getData()).subscriptions[channel.id];
+  if (!existing) return; // keeps no record of channels you did not ask for
+  const changed =
+    (!existing.handle && channel.handle) ||
+    (!existing.avatar && channel.avatar) ||
+    (!existing.subscribers && channel.subscribers) ||
+    (channel.handle != null && existing.handle !== channel.handle) ||
+    (channel.avatar != null && existing.avatar !== channel.avatar) ||
+    (channel.subscribers != null && existing.subscribers !== channel.subscribers);
+  if (!changed) return;
+
   await updateData((data) => {
-    const existing = data.subscriptions[channel.id];
-    if (!existing) return;
-    existing.handle = channel.handle ?? existing.handle;
-    existing.subscribers = channel.subscribers ?? existing.subscribers;
-    existing.avatar = channel.avatar ?? existing.avatar;
-    if (channel.handle || channel.subscribers) existing.detailsAt = Date.now();
+    const current = data.subscriptions[channel.id];
+    if (!current) return;
+    current.handle = channel.handle ?? current.handle;
+    current.subscribers = channel.subscribers ?? current.subscribers;
+    current.avatar = channel.avatar ?? current.avatar;
+    if (channel.handle || channel.subscribers) current.detailsAt = Date.now();
   });
 }
 
@@ -208,21 +224,29 @@ export async function backfillHandles(
 export async function noteHarvestedChannels(
   cards: { id: string; avatar?: string; handle?: string }[],
 ): Promise<void> {
-  for (const card of cards) {
-    const { subscriptions } = await getData();
+  // One write for the whole batch, and none when nothing is new. Every
+  // storage write re-runs the route (onDataChanged), and a feed re-render per
+  // harvested card was measured as the feed "rapidly refreshing" for minutes
+  // after a Takeout import.
+  const { subscriptions } = await getData();
+  const keep = cards.filter((card) => {
     const existing = subscriptions[card.id];
-    if (!existing) continue;
-    if ((!card.avatar || existing.avatar) && (!card.handle || existing.handle)) continue;
-    await updateData((data) => {
+    if (!existing) return false; // the standing rule: only channels you follow
+    return (card.avatar && !existing.avatar) || (card.handle && !existing.handle);
+  });
+  if (keep.length === 0) return;
+
+  await updateData((data) => {
+    for (const card of keep) {
       const subscription = data.subscriptions[card.id];
-      if (!subscription) return; // unfollowed while the read was in flight
+      if (!subscription) continue; // unfollowed while the read was in flight
       if (card.avatar && !subscription.avatar) subscription.avatar = card.avatar;
       if (card.handle && !subscription.handle) {
         subscription.handle = card.handle;
         subscription.detailsAt = Date.now();
       }
-    });
-  }
+    }
+  });
 }
 
 /** Channels already asked for this session, so a deleted one is not re-asked

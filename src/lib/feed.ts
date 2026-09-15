@@ -35,15 +35,36 @@ export const MAX_FEED_VIDEOS = 400;
 export const CHANNEL_VIDEO_LIMIT = 120;
 
 /**
+ * The cap for a channel whose older videos the user explicitly loaded.
+ *
+ * Deliberately opt-in per channel rather than a bigger default: at roughly
+ * 300 bytes of JSON per video, 600 is ~180 KB for one channel, which is fine
+ * for the handful someone actually asks for and ruinous as a default across a
+ * 300-channel Takeout import — chrome.storage.local has an ordinary quota
+ * here by design.
+ */
+export const DEEP_CHANNEL_VIDEO_LIMIT = 600;
+
+/** This channel's cap, which depends on whether it was ever deep-loaded. */
+export const videoLimitFor = (entry?: { deep?: boolean }): number =>
+  entry?.deep ? DEEP_CHANNEL_VIDEO_LIMIT : CHANNEL_VIDEO_LIMIT;
+
+/**
  * Combine two lists of the same channel's videos, newest first.
  *
  * `authoritative` says whether `incoming` should win on the fields both sides
  * claim. The Atom feed is authoritative: it carries an exact publish date and a
  * real view count. A channel-page harvest is not — its date is derived from
  * text like "4mo ago" — but it is the only source of a duration, so a duration
- * is always taken from whichever side has one.
+ * is always taken from whichever side has one. The same holds for the Shorts
+ * flag, which the Atom feed never carries at all.
  */
-export function mergeVideos(existing: Video[], incoming: Video[], authoritative: boolean): Video[] {
+export function mergeVideos(
+  existing: Video[],
+  incoming: Video[],
+  authoritative: boolean,
+  limit: number = CHANNEL_VIDEO_LIMIT,
+): Video[] {
   const byId = new Map<string, Video>();
   for (const video of existing) byId.set(video.id, video);
   for (const video of incoming) {
@@ -54,11 +75,16 @@ export function mergeVideos(existing: Video[], incoming: Video[], authoritative:
     }
     const winner = authoritative ? { ...previous, ...video } : { ...video, ...previous };
     winner.duration = previous.duration ?? video.duration;
+    // Same rule as duration, for the same reason: only one side ever knows,
+    // and whichever side that is must survive the merge. The Atom feed never
+    // classifies, so a refresh must not wipe a classification a channel page
+    // or the player lookup already established.
+    winner.isShort = previous.isShort ?? video.isShort;
     byId.set(video.id, winner);
   }
   return [...byId.values()]
     .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))
-    .slice(0, CHANNEL_VIDEO_LIMIT);
+    .slice(0, limit);
 }
 
 const feedUrl = (channelId: string): string =>
@@ -150,6 +176,31 @@ export interface FeedStatus {
 }
 
 /**
+ * The revalidation pass currently in flight, shared by concurrent callers.
+ *
+ * route() re-runs on every storage write in ANY tab (a progress flush from a
+ * video opened in another tab, a harvest note), and every run asks for the
+ * feed again. Without coalescing, each started its own full pass: the fresh
+ * cache is only persisted when the WHOLE pool is done, which a big import
+ * puts tens of seconds away, so every overlapping run found everything stale
+ * and launched another hundred fetches — 404s logged again and again, the
+ * view rebuilding itself until the neighbouring tab was closed. One pass in
+ * flight per tab; concurrent callers JOIN it (below) instead of starting
+ * another.
+ *
+ * Joining matters, not just coalescing: a caller that only painted the
+ * not-yet-persisted storage cache once and never heard from the pass again
+ * could stick on its initial (possibly empty) state — the pass's completion
+ * paints go to the first caller, whose view may be token-dead by then, and
+ * nothing re-renders. The feed then "vanishes seconds after loading" until a
+ * manual refresh.
+ */
+let pendingPass: {
+  promise: Promise<void>;
+  listeners: Set<(videos: Video[], status: FeedStatus) => void>;
+} | null = null;
+
+/**
  * Stale-while-revalidate: calls `onUpdate` immediately with whatever is cached,
  * then again as fresher channels arrive. The caller renders on every call.
  */
@@ -166,10 +217,44 @@ export async function loadFeed(
     (id) => opts.force || !cache[id] || Date.now() - cache[id].fetchedAt > ttlMs,
   );
 
+  // Coalescing (see pendingPass): JOIN the pass already running — paint this
+  // caller's initial cached state, then keep receiving its updates from the
+  // pass's in-memory cache as results land and when it completes. The status
+  // stays neutral here ("Updating" belongs to the pass's own caller), because
+  // the in-flight pass decides freshness, not this caller.
+  if (stale.length > 0 && !opts.force && pendingPass) {
+    onUpdate(mergeCache(cache, channelIds), { refreshing: 0, done: 0, failed: [] });
+    const pass = pendingPass;
+    pass.listeners.add(onUpdate);
+    try {
+      await pass.promise;
+    } finally {
+      pass.listeners.delete(onUpdate);
+    }
+    return;
+  }
+
   const status: FeedStatus = { refreshing: stale.length, done: 0, failed: [] };
   onUpdate(mergeCache(cache, channelIds), status);
 
   if (stale.length === 0) return;
+
+  // Everyone this pass paints for: its own caller plus any loadFeed caller
+  // that joined it above. A listener whose view was replaced in the meantime
+  // is a no-op (its paint checks the render token), and it is dropped when
+  // the pass settles either way.
+  const listeners = new Set<(videos: Video[], feedStatus: FeedStatus) => void>();
+  const notify = (feedStatus: FeedStatus): void => {
+    const merged = mergeCache(cache, channelIds);
+    onUpdate(merged, feedStatus);
+    for (const listener of listeners) {
+      try {
+        listener(merged, feedStatus);
+      } catch {
+        // One listener's paint must never be able to break the pass.
+      }
+    }
+  };
 
   // Re-render as results land, but not more than a few times a second — with
   // hundreds of channels a render per response would thrash the page.
@@ -177,33 +262,59 @@ export async function loadFeed(
   const maybeRender = (force: boolean): void => {
     if (!force && Date.now() - lastRender < 400) return;
     lastRender = Date.now();
-    onUpdate(mergeCache(cache, channelIds), { ...status, failed: [...status.failed] });
+    notify({ ...status, failed: [...status.failed] });
   };
 
-  await pool(stale, async (channelId) => {
-    try {
-      // Merged, not replaced: everything harvested from the channel page would
-      // otherwise be thrown away by the next routine refresh.
-      cache[channelId] = {
-        fetchedAt: Date.now(),
-        videos: mergeVideos(cache[channelId]?.videos ?? [], await fetchChannelFeed(channelId), true),
-      };
-    } catch (error) {
-      // Keep the previous videos; a transient failure should not empty the feed.
-      cache[channelId] = {
-        fetchedAt: Date.now(),
-        videos: cache[channelId]?.videos ?? [],
-        error: error instanceof Error ? error.message : 'fetch failed',
-      };
-      status.failed.push(channelId);
-    }
-    status.done++;
-    maybeRender(false);
-  });
+  // The pass promise is created and pendingPass is registered in the same
+  // synchronous run, so no other loadFeed caller can slip in between and miss
+  // it (callers only interleave at await points).
+  const pass = (async (): Promise<void> => {
+    await pool(stale, async (channelId) => {
+      try {
+        // Merged, not replaced: everything harvested from the channel page would
+        // otherwise be thrown away by the next routine refresh.
+        cache[channelId] = {
+          ...cache[channelId],
+          fetchedAt: Date.now(),
+          videos: mergeVideos(
+            cache[channelId]?.videos ?? [],
+            await fetchChannelFeed(channelId),
+            true,
+            videoLimitFor(cache[channelId]),
+          ),
+          error: undefined,
+        };
+      } catch (error) {
+        // Keep the previous videos; a transient failure should not empty the feed.
+        cache[channelId] = {
+          ...cache[channelId],
+          fetchedAt: Date.now(),
+          videos: cache[channelId]?.videos ?? [],
+          error: error instanceof Error ? error.message : 'fetch failed',
+        };
+        status.failed.push(channelId);
+      }
+      status.done++;
+      maybeRender(false);
+    });
 
-  await putFeedCache(cache, channelIds);
-  await backfillTitles(cache, channelIds);
-  maybeRender(true);
+    await putFeedCache(cache, channelIds);
+    await backfillTitles(cache, channelIds);
+    // Final paint AFTER the cache is persisted: joined callers re-render from
+    // the same data a later route rerun would read back from storage.
+    maybeRender(true);
+  })();
+
+  if (!opts.force) {
+    pendingPass = { promise: pass, listeners };
+    try {
+      await pass;
+    } finally {
+      if (pendingPass?.promise === pass) pendingPass = null;
+    }
+  } else {
+    await pass;
+  }
 }
 
 /**

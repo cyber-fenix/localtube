@@ -34,6 +34,16 @@ function mountPointFor(host: HTMLElement): HTMLElement | null {
       return host.querySelector('#channel') ?? host.querySelector('#subscribe')?.parentElement ?? null;
     case 'ytd-channel-about-metadata-renderer':
       return host.querySelector('#subscribe-button')?.parentElement ?? null;
+    // The Shorts player: the bar is tagged (it is the only element common to
+    // both button variants YouTube serves), so aim at the slot its Subscribe
+    // sits in. Falls back to that button's own parent if the class name
+    // changes, which is the same slot by another route.
+    case 'yt-reel-channel-bar-view-model':
+      return (
+        host.querySelector<HTMLElement>('.ytReelChannelBarViewModelReelSubscribeButton') ??
+        host.querySelector('yt-subscribe-button-view-model, button-view-model')?.parentElement ??
+        null
+      );
     default:
       return host.parentElement;
   }

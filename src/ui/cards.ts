@@ -159,7 +159,9 @@ export function videoCard(video: Video, action?: CardAction, options?: GridOptio
   img.src = video.thumbnail;
   img.alt = '';
   thumb.appendChild(img);
-  const badge = durationBadge(video.duration ?? watched?.duration);
+  // No length on a Short, the way YouTube shows none: a Short's length is not
+  // information anyone is deciding on, and a badge there reads as a mistake.
+  const badge = video.isShort ? null : durationBadge(video.duration ?? watched?.duration);
   if (badge) thumb.appendChild(badge);
   const bar = progressBar(watchedFraction(watched));
   if (bar) thumb.appendChild(bar);
@@ -230,6 +232,74 @@ export function videoGrid(videos: Video[], action?: CardAction, options?: GridOp
   grid.className = 'lt-grid';
   for (const video of videos) grid.appendChild(videoCard(video, action, options));
   return grid;
+}
+
+/**
+ * The Shorts shelf: one horizontal row of vertical covers.
+ *
+ * Shorts arrive in the same Atom feed as uploads, with nothing to tell them
+ * apart, so before this they sat in the chronological grid wearing 16:9
+ * thumbnails — which is what "the feed mixes Shorts in" meant. Shelving them
+ * follows YouTube's own home page: they are a different kind of thing and they
+ * do not belong in a reverse-chronological column of videos.
+ *
+ * The row scrolls horizontally rather than wrapping, so a burst of Shorts from
+ * one channel cannot push the actual videos below the fold.
+ */
+export function shortsShelf(videos: Video[]): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'lt-shorts';
+
+  const heading = document.createElement('h2');
+  heading.className = 'lt-shorts-title';
+  heading.textContent = 'Shorts';
+  section.appendChild(heading);
+
+  const row = document.createElement('div');
+  row.className = 'lt-shorts-row';
+
+  for (const video of videos) {
+    const card = document.createElement('div');
+    card.className = 'lt-short';
+
+    // A Short opens on its own player, not the watch page — the same URL
+    // YouTube's own card points at. Resume does not apply: there is nowhere
+    // to resume to in a sixty-second video.
+    const link = document.createElement('a');
+    link.className = 'lt-short-link';
+    link.href = `/shorts/${encodeURIComponent(video.id)}`;
+
+    const thumb = document.createElement('div');
+    thumb.className = 'lt-short-thumb';
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.alt = '';
+    // A Short's cover is vertical; the feed only ever gave us the 16:9 frame,
+    // so ask for the portrait one and fall back to what we have.
+    img.src = `https://i.ytimg.com/vi/${video.id}/oardefault.jpg`;
+    img.addEventListener('error', () => { img.src = video.thumbnail; }, { once: true });
+    thumb.appendChild(img);
+    link.appendChild(thumb);
+
+    const title = document.createElement('a');
+    title.className = 'lt-short-title';
+    title.href = link.href;
+    title.textContent = video.title;
+    title.title = video.title;
+
+    const meta = document.createElement('div');
+    meta.className = 'lt-short-row';
+    meta.textContent = [video.channelTitle, formatViews(video.views)].filter(Boolean).join(' • ');
+
+    const menu = kebab(video);
+    menu.classList.add('lt-short-kebab');
+
+    card.append(link, title, meta, menu);
+    row.appendChild(card);
+  }
+
+  section.appendChild(row);
+  return section;
 }
 
 /** Empty / error state with an optional call to action. */

@@ -176,7 +176,19 @@ window.addEventListener(VIEW_CHANGED, closeOverlays);
 
 // An edit made in the popup (or another tab) should be reflected here without a
 // reload — a follow removed in the popup must not leave a stale "Following".
-onDataChanged(() => run());
+//
+// Trailing-debounced: route() rebuilds views wholesale, so a burst of storage
+// writes — the card harvest noting avatars, a backfill learning handles —
+// becomes ONE route at the end of the burst instead of a full re-render per
+// write. Without this the import-aftershock measured as the feed rebuilding
+// several times a second — "rapidly refreshing" — every hover dying with its
+// card.
+let runTimer = 0;
+const runSoon = (): void => {
+  window.clearTimeout(runTimer);
+  runTimer = window.setTimeout(run, 350);
+};
+onDataChanged(runSoon);
 
 // Signing in or out flips read-only mode without a reload: the whole route
 // re-runs, so the skin lifts, the write controls come down (or come back), and
