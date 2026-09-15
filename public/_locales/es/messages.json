@@ -1,12 +1,12 @@
 {
   "extName": {
-    "message": "LocalTube - Suscripciones y listas de reproducción sin iniciar sesión en Google"
+    "message": "LocalTube - Suscripciones y listas de reproducción sin cuenta de Google"
   },
   "extShortName": {
     "message": "LocalTube"
   },
   "extDescription": {
-    "message": "Sigue canales, crea listas de reproducción y ten una página de inicio de YouTube solo con tus suscripciones, todo guardado localmente, sin cuenta y sin seguimiento."
+    "message": "Sigue canales, crea listas y ten un inicio de YouTube solo con tus suscripciones. Todo local, sin cuenta ni seguimiento."
   },
   "popup_tagline": {
     "message": "Tu cuenta local de YouTube"
