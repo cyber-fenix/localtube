@@ -210,10 +210,6 @@ export async function putFeedCache(patch: FeedCache, keepChannelIds: string[]): 
   }
 }
 
-export async function clearFeedCache(): Promise<void> {
-  await storage(() => chrome.storage.local.remove(CACHE_KEY));
-}
-
 /* --------------------------------------------------------------- change feed */
 
 /** Notify when the store changes — lets an open YouTube tab react to an edit

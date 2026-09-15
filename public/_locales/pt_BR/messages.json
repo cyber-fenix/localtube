@@ -8,6 +8,9 @@
   "extDescription": {
     "message": "Siga canais, crie playlists e tenha uma página inicial do YouTube só com suas inscrições — tudo salvo localmente, sem conta, sem rastreamento."
   },
+  "popup_tagline": {
+    "message": "Sua conta local do YouTube"
+  },
   "popup_stat_following": {
     "message": "seguindo"
   },

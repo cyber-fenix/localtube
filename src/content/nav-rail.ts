@@ -19,6 +19,7 @@
 
 import { anchor, generation, waitForAnchor } from '@/content/youtube-dom';
 import { writesAllowed } from '@/content/account';
+import { singleFlight } from '@/content/single-flight';
 import { listSubscriptions } from '@/lib/subscriptions';
 import { getData, systemPlaylist } from '@/lib/store';
 import { go, viewHash, type View } from '@/ui/views';
@@ -253,7 +254,20 @@ function addEntry(template: HTMLElement, after: HTMLElement, spec: EntrySpec, ta
  */
 let lastChannelSignature: string | null = null;
 
-export async function renderGuideChannels(): Promise<void> {
+/**
+ * Single-flighted (see content/single-flight.ts) because this has three
+ * independent callers that can all fire within the same tick: route()'s
+ * Promise.all on every navigation, watchForMissingControls()'s self-healing
+ * observer in content/index.ts, and watchForGuide() below, which fires the
+ * moment the guide first exists — on a cold reload with the guide already
+ * open, that is exactly when the self-healing observer's own MutationObserver
+ * also wakes up, since both watch the same subtree. Two unguarded calls
+ * racing here means two independent reads of `lastChannelSignature` both
+ * seeing "nothing built yet" and both inserting a full set of channel
+ * clones — the same "two Like buttons" failure mode documented for the other
+ * mounts, just never given the same guard.
+ */
+async function renderGuideChannelsOnce(): Promise<void> {
   // Signed in, the sidebar's channel list is the account's REAL one, rendered
   // by YouTube in the very slot we use when signed out — and its Polymer
   // renderer re-renders that list, deleting foreign children as it goes. Ours
@@ -311,6 +325,9 @@ export async function renderGuideChannels(): Promise<void> {
       icon: atEnd ? CHEVRON_UP : CHEVRON_DOWN,
       onClick: () => {
         shownCount = atEnd ? COLLAPSED : Math.min(shownCount + PAGE_SIZE, channels.length);
+        // The exported, single-flighted binding — not this module-internal
+        // function — so a "Show more" click can't race a concurrent
+        // self-healing rebuild any more than any other caller can.
         void renderGuideChannels();
       },
     };
@@ -350,12 +367,96 @@ export async function renderGuideChannels(): Promise<void> {
   );
 }
 
+export const renderGuideChannels = singleFlight(renderGuideChannelsOnce);
+
 /** A section rule, tagged with the section that owns it. */
 function rule(owner: string): HTMLElement {
   const line = document.createElement('div');
   line.className = 'lt-guide-rule';
   line.dataset.ltRule = owner;
   return line;
+}
+
+/**
+ * Collapse two adjacent rules into one.
+ *
+ * renderGuideChannels() draws a trailing rule after the channel list, and
+ * mountNavRail() draws its own leading rule before the LocalTube section —
+ * each one correct in isolation, each written without knowing about the
+ * other. Whether they end up touching depends on whatever YouTube renders
+ * between "Subscriptions" and the end of that guide section, which varies —
+ * with nothing in between (the common case signed out), they land back to
+ * back as a double line. The two mounts run concurrently from route()'s
+ * Promise.all with no ordering guarantee, so the fix can't be "check before
+ * inserting" in either one; it has to be a pass afterwards that looks at
+ * what actually landed. Idempotent and cheap enough to call after every
+ * route(), including ones that touched neither rule.
+ *
+ * "Adjacent" means visually, not in the DOM: YouTube's own signed-out "You"
+ * and "History" entries (native-skin's HIDE_SELECTORS) commonly sit in the
+ * DOM between these two rules, `display: none`. A plain
+ * `previousElementSibling` check saw those hidden entries as real siblings
+ * and never fired — the two rules rendered back to back on screen while the
+ * DOM said they had content between them. `previousVisible` walks back past
+ * anything that takes up no space, hidden natively or hidden by us.
+ */
+function previousVisible(el: Element): Element | null {
+  let sibling = el.previousElementSibling;
+  while (sibling && (sibling as HTMLElement).offsetParent === null) sibling = sibling.previousElementSibling;
+  return sibling;
+}
+
+export function dedupeGuideRules(): void {
+  for (const line of Array.from(document.querySelectorAll('.lt-guide-rule'))) {
+    if (line.isConnected && previousVisible(line)?.classList.contains('lt-guide-rule')) {
+      line.remove();
+    }
+  }
+}
+
+/**
+ * Keep the sidebar's "you are here" highlight honest.
+ *
+ * `ytd-guide-entry-renderer[active]` is what YouTube itself uses for the grey
+ * background + bold title on the current page (verified live, 2026-09-15: a
+ * plain attribute selector, not something Polymer fights on a timer, so
+ * setting it on our own clones gets the identical native look for free). It
+ * is bound to the REAL url, which a LocalTube view never changes — so
+ * switching from the feed to History left Home highlighted as if nothing had
+ * happened, with nothing marking History as current instead.
+ *
+ * Called with the resolved View whenever content/home.ts actually renders
+ * one, and with null when it tears its root down (content/home.ts's
+ * unmountHome) — null only clears entries THIS module set, since at that
+ * point the real page could be anything and restoring YouTube's own guess is
+ * YouTube's job, not ours.
+ */
+export function syncGuideActiveState(view: View | null): void {
+  const guide = anchor('guide');
+  if (!guide) return;
+
+  if (!view) {
+    for (const entry of Array.from(guide.querySelectorAll(`.${ENTRY_CLASS}[active]`)))
+      entry.removeAttribute('active');
+    return;
+  }
+
+  const target =
+    view.name === 'feed'
+      ? guide.querySelector(`.${ENTRY_CLASS}[data-lt-header]`)
+      : view.name === 'playlist'
+        ? guide.querySelector(`.${ENTRY_CLASS}[data-lt-view="playlists"]`)
+        : view.name === 'subscriptions'
+          ? subscriptionsEntry()
+          : guide.querySelector(`.${ENTRY_CLASS}[data-lt-view="${view.name}"]`);
+
+  // Clear every OTHER active entry, native or ours — subscriptionsEntry() can
+  // legitimately BE the target (on /feed/subscriptions, YouTube's own active
+  // state already agrees with LocalTube's), and leaving that one alone is the
+  // correct answer, not a bug this function should paper over.
+  for (const entry of Array.from(guide.querySelectorAll('ytd-guide-entry-renderer[active]')))
+    if (entry !== target) entry.removeAttribute('active');
+  target?.setAttribute('active', '');
 }
 
 /** Insert the "channels were rendered here" marker if it is missing. */
@@ -482,7 +583,19 @@ export async function mountNavRail(): Promise<void> {
     specs.push([after, spec]);
   }
 
-  after.parentElement?.insertBefore(rule('lt'), after.nextSibling);
+  // Signed out (inline placement), this block sits inside YouTube's own
+  // "Home" ytd-guide-section-renderer — the same section holding
+  // Home/Shorts/Subscriptions — and that section draws its OWN native
+  // border-bottom around its whole box, LocalTube's tail included. Verified
+  // live: the section's own computed border-bottom is 1px solid
+  // rgba(0,0,0,.2), the exact rule this module draws by hand elsewhere, and
+  // its box literally ends a few pixels below "Liked videos". Drawing our
+  // own trailing rule there duplicated that native one — a second thin line
+  // a few pixels under the first, easy to miss in isolation but exactly what
+  // read as "double bar at the bottom" once both existed. Signed in ('end'
+  // placement), this block is appended AFTER every native section instead,
+  // where no such border exists to lean on, so it still needs its own.
+  if (signedInMode) after.parentElement?.insertBefore(rule('lt'), after.nextSibling);
 
   window.setTimeout(
     () => specs.forEach(([el, spec]) => el.isConnected && paintEntry(el, spec)),

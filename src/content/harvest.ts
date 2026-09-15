@@ -21,8 +21,6 @@ import { extensionEnabled } from '@/content/account';
 import { readContext } from '@/content/page-context';
 import { mergeVideos, videoLimitFor } from '@/lib/feed';
 import { parseAge, parseDuration, parseViews } from '@/lib/parse';
-
-export { parseAge, parseDuration, parseViews };
 import { getData, getFeedCache, putFeedCache } from '@/lib/store';
 import type { Video } from '@/types';
 

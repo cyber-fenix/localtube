@@ -11,6 +11,10 @@
     "message": "Follow channels, build playlists, and get a subscriptions-only YouTube homepage - all stored locally, no account, no tracking.",
     "description": "Extension summary shown in chrome://extensions and the Web Store listing. Max 132 characters."
   },
+  "popup_tagline": {
+    "message": "Your local YouTube account",
+    "description": "Popup header subtitle, under the LocalTube name"
+  },
   "popup_stat_following": {
     "message": "following",
     "description": "Popup stat label under the follow count"

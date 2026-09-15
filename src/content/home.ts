@@ -8,6 +8,7 @@
 import { anchor, currentRoute, markUrlHandled, waitForAnchor } from '@/content/youtube-dom';
 import { signedIn } from '@/content/account';
 import { flashToast } from '@/content/toast';
+import { syncGuideActiveState } from '@/content/nav-rail';
 import { systemPlaylistId } from '@/lib/playlists';
 import { getSettings } from '@/lib/store';
 import { t } from '@/lib/i18n';
@@ -45,6 +46,10 @@ export function unmountHome(): void {
   for (const el of Array.from(document.querySelectorAll(`.${ACTIVE_CLASS}`)))
     el.classList.remove(ACTIVE_CLASS);
   document.getElementById(ROOT_ID)?.remove();
+  // Forget which LocalTube sidebar entry was "current" — the real page could
+  // be anything from here, and that's YouTube's own guide to draw correctly,
+  // not ours to guess at.
+  syncGuideActiveState(null);
 }
 
 // LocalTube changes its own view with pushState, which fires no navigation
@@ -104,6 +109,7 @@ export async function renderHome(): Promise<void> {
   // The Subscriptions page opens on the channel list, which is what it is
   // named for; home opens on the video feed. Either tab still switches freely.
   const view: View = hashView ?? { name: route === 'subscriptions' ? 'subscriptions' : 'feed' };
+  syncGuideActiveState(view);
   switch (view.name) {
     case 'subscriptions':
       await subscriptionsView(root, rerender);

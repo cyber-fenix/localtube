@@ -8,6 +8,9 @@
   "extDescription": {
     "message": "Sigue canales, crea listas de reproducción y ten una página de inicio de YouTube solo con tus suscripciones, todo guardado localmente, sin cuenta y sin seguimiento."
   },
+  "popup_tagline": {
+    "message": "Tu cuenta local de YouTube"
+  },
   "popup_stat_following": {
     "message": "siguiendo"
   },

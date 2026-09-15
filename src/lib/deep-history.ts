@@ -117,8 +117,15 @@ export async function loadChannelHistory(
   // Not authoritative: the Atom feed's exact publish dates and view counts win
   // over these, which are parsed from "3 months ago" and "756K views". What
   // this side uniquely brings is the videos the feed never carried at all.
-  const merged = mergeVideos(before, collected, false, limit);
+  //
+  // Merge against a cache read taken NOW, not the `before` snapshot from
+  // before the paging loop: a run pages through up to 20 requests, easily
+  // ten-plus seconds, and a routine feed refresh landing anywhere in that
+  // window would otherwise have its result silently overwritten by this
+  // write — the exact write-can't-answer-"did-anything-change" failure
+  // CLAUDE.md documents elsewhere.
   const fresh = await getFeedCache();
+  const merged = mergeVideos(fresh[channelId]?.videos ?? before, collected, false, limit);
   fresh[channelId] = {
     ...fresh[channelId],
     fetchedAt: fresh[channelId]?.fetchedAt ?? Date.now(),

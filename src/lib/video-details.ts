@@ -15,7 +15,7 @@
 // reversed the original "no durations" decision.
 
 import { InnertubeRateLimited, innertubeAvailable, videoViaInnertube } from '@/lib/innertube';
-import { putFeedCache } from '@/lib/store';
+import { getFeedCache, putFeedCache } from '@/lib/store';
 import type { FeedCache, Video } from '@/types';
 
 /**
@@ -76,7 +76,11 @@ export async function backfillVideoDetails(
   const batch = pending.slice(0, BATCH);
 
   let found = 0;
-  const touched = new Set<string>();
+  // Per-video, not just per-channel: the write step below applies these onto
+  // a cache read taken AFTER the pass, not onto the (possibly by-then-stale)
+  // `cache` argument, so it needs to know exactly what changed rather than
+  // being handed the whole array to overwrite.
+  const updates = new Map<string, { channelId: string; duration?: number; isShort?: boolean }>();
   let cursor = 0;
 
   const worker = async (): Promise<void> => {
@@ -88,11 +92,16 @@ export async function backfillVideoDetails(
         // Mutating the cached object in place: `cache` is the same object the
         // caller merges its view from, so an open feed can repaint from it
         // without waiting for the storage round-trip.
-        if (details.duration !== undefined && video.duration === undefined)
+        const update: { channelId: string; duration?: number; isShort?: boolean } = { channelId };
+        if (details.duration !== undefined && video.duration === undefined) {
           video.duration = details.duration;
-        if (details.isShort !== undefined && video.isShort === undefined)
+          update.duration = details.duration;
+        }
+        if (details.isShort !== undefined && video.isShort === undefined) {
           video.isShort = details.isShort;
-        touched.add(channelId);
+          update.isShort = details.isShort;
+        }
+        updates.set(video.id, update);
         found++;
         onProgress?.();
       }
@@ -108,9 +117,36 @@ export async function backfillVideoDetails(
     console.warn('[LocalTube] video details paused — Innertube rate-limited');
   }
 
-  if (touched.size === 0) return 0;
+  if (updates.size === 0) return 0;
+
+  // A pass over 60 videos, two at a time with a pause between, can run for
+  // several seconds — long enough for a routine feed refresh to land mid-pass.
+  // Writing back the caller's `cache` snapshot wholesale would silently
+  // overwrite whatever that refresh added for a touched channel. Instead,
+  // read fresh and patch only the specific videos this pass actually touched.
+  const fresh = await getFeedCache();
   const patch: FeedCache = {};
-  for (const channelId of touched) if (cache[channelId]) patch[channelId] = cache[channelId];
+  const byChannel = new Map<string, typeof updates>();
+  for (const [videoId, update] of updates) {
+    if (!byChannel.has(update.channelId)) byChannel.set(update.channelId, new Map());
+    byChannel.get(update.channelId)?.set(videoId, update);
+  }
+  for (const [channelId, channelUpdates] of byChannel) {
+    const entry = fresh[channelId];
+    if (!entry) continue;
+    patch[channelId] = {
+      ...entry,
+      videos: entry.videos.map((v: Video) => {
+        const update = channelUpdates.get(v.id);
+        if (!update) return v;
+        return {
+          ...v,
+          duration: update.duration ?? v.duration,
+          isShort: update.isShort ?? v.isShort,
+        };
+      }),
+    };
+  }
   await putFeedCache(patch, channelIds);
   return found;
 }

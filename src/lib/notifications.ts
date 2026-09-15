@@ -24,10 +24,6 @@ export async function listNotifications(): Promise<NotificationEntry[]> {
   return (await getData()).notifications;
 }
 
-export async function unreadCount(): Promise<number> {
-  return (await getData()).notifications.filter((entry) => !entry.read).length;
-}
-
 /**
  * Record uploads the feed refresh just discovered.
  *

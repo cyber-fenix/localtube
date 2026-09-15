@@ -23,6 +23,7 @@ import { BELL_ID, closeNotifications, mountBell } from '@/content/notifications'
 import {
   CHANNELS_ID,
   SECTION_ID,
+  dedupeGuideRules,
   mountNavRail,
   renderGuideChannels,
   renderGuideCounts,
@@ -107,6 +108,9 @@ async function route(): Promise<void> {
     mountProgress(),
     harvestChannelVideos().then(() => undefined),
   ]);
+  // Runs after both, regardless of which finished first — see
+  // dedupeGuideRules() for why this can't be fixed inside either mount.
+  dedupeGuideRules();
 }
 
 /**
@@ -196,9 +200,9 @@ function watchForMissingControls(): void {
     // The guide is re-rendered on its own too, taking both LocalTube groups
     // with it.
     if (anchor('guide') && !document.getElementById(CHANNELS_ID))
-      void renderGuideChannels().catch(() => undefined);
+      void renderGuideChannels().then(dedupeGuideRules).catch(() => undefined);
     if (anchor('guide') && !document.getElementById(SECTION_ID))
-      void mountNavRail().catch(() => undefined);
+      void mountNavRail().then(dedupeGuideRules).catch(() => undefined);
   };
   new MutationObserver(() => {
     if (queued) return;

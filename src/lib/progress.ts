@@ -83,12 +83,6 @@ export async function clearProgress(videoId: string): Promise<void> {
   });
 }
 
-export async function clearAllProgress(): Promise<void> {
-  await updateData((data) => {
-    data.progress = {};
-  });
-}
-
 /** Drop the least recently updated positions once the map is over its cap. */
 export function prune(progress: Record<string, ProgressEntry>): void {
   const ids = Object.keys(progress);
