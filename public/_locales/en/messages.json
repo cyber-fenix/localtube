@@ -942,5 +942,13 @@
   "opt_channel_video_limit_label": {
     "message": "Keep up to (videos per channel)",
     "description": "Popup setting label for the per-channel stored-video cap"
+  },
+  "badge_live": {
+    "message": "LIVE",
+    "description": "Thumbnail badge on a video that is currently streaming live"
+  },
+  "badge_upcoming": {
+    "message": "Upcoming",
+    "description": "Thumbnail badge on a scheduled stream or premiere that has not started yet"
   }
 }

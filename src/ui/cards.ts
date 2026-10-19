@@ -57,6 +57,39 @@ export function durationBadge(seconds?: number): HTMLElement | null {
 }
 
 /**
+ * The cover badge, in the same bottom-right slot a duration occupies: LIVE,
+ * Upcoming, a duration, or nothing.
+ *
+ * A live or upcoming video's `duration` is always undefined — YouTube's own
+ * player endpoint reports a length of 0 for both, verified live, 2026-10-20 —
+ * which is exactly why one showed a bare thumbnail before `isLive`/
+ * `isUpcoming` existed: the duration branch below ran and found nothing.
+ * Checking them first is what actually fixes that; the duration call is just
+ * what is left once neither applies.
+ *
+ * LIVE reuses `.lt-duration`'s own box with a `.lt-live` modifier for the red
+ * fill — measured on a real LIVE thumbnail badge, 2026-10-20:
+ * rgba(225,0,45,0.9). Upcoming keeps the ordinary dark fill, matching
+ * YouTube's own (verified the same day: its "Upcoming" badge carries the
+ * same default style as a duration, not a distinct colour).
+ */
+export function coverBadge(video: Video, fallbackDuration?: number): HTMLElement | null {
+  if (video.isLive) {
+    const badge = document.createElement('div');
+    badge.className = 'lt-duration lt-live';
+    badge.textContent = t('badge_live');
+    return badge;
+  }
+  if (video.isUpcoming) {
+    const badge = document.createElement('div');
+    badge.className = 'lt-duration';
+    badge.textContent = t('badge_upcoming');
+    return badge;
+  }
+  return durationBadge(video.duration ?? fallbackDuration);
+}
+
+/**
  * The red watched bar across the bottom of a cover.
  *
  * Returns null rather than an empty bar for an unwatched video: YouTube shows
@@ -165,7 +198,7 @@ export function videoCard(video: Video, action?: CardAction, options?: GridOptio
   thumb.appendChild(img);
   // No length on a Short, the way YouTube shows none: a Short's length is not
   // information anyone is deciding on, and a badge there reads as a mistake.
-  const badge = video.isShort ? null : durationBadge(video.duration ?? watched?.duration);
+  const badge = video.isShort ? null : coverBadge(video, watched?.duration);
   if (badge) thumb.appendChild(badge);
   const bar = progressBar(watchedFraction(watched));
   if (bar) thumb.appendChild(bar);

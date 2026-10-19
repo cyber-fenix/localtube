@@ -709,5 +709,11 @@
   },
   "opt_channel_video_limit_label": {
     "message": "Bis zu (Videos pro Kanal) behalten"
+  },
+  "badge_live": {
+    "message": "LIVE"
+  },
+  "badge_upcoming": {
+    "message": "Anstehend"
   }
 }

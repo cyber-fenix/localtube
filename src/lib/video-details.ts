@@ -1,5 +1,5 @@
-// Fill in what the Atom feed cannot say: how long a video is, and whether it
-// is a Short.
+// Fill in what the Atom feed cannot say: how long a video is, whether it is a
+// Short, and whether it is live or upcoming rather than a finished upload.
 //
 // The feed carries neither. It does not even separate the two — a channel's
 // Shorts arrive in the same 15 entries as its uploads, with the same shape
@@ -44,11 +44,23 @@ const attempted = new Set<string>();
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A video still missing something this pass could supply. A known Short needs
- *  no duration: YouTube shows no length on a Short either. */
+/**
+ * A video still missing something this pass could supply. A known Short needs
+ * no duration: YouTube shows no length on a Short either.
+ *
+ * Deliberately NOT short-circuited by `isLive`/`isUpcoming` being already
+ * true: unlike a duration or a Shorts classification, those are transient —
+ * a live stream ends, an upcoming one starts — so a video with neither a
+ * duration nor a resolved live state stays a candidate every pass. The
+ * `attempted` set below still stops it being re-asked more than once per tab
+ * session; what changes here is that the NEXT full page load asks again
+ * rather than trusting a flag that may be stale by then. A stream that has
+ * ended gets a real `duration` back and stops matching this at all.
+ */
 function needsDetails(video: Video): boolean {
   if (video.isShort === undefined) return true;
-  return video.isShort === false && video.duration === undefined;
+  if (video.isShort) return false;
+  return video.duration === undefined;
 }
 
 /**
@@ -80,7 +92,18 @@ export async function backfillVideoDetails(
   // a cache read taken AFTER the pass, not onto the (possibly by-then-stale)
   // `cache` argument, so it needs to know exactly what changed rather than
   // being handed the whole array to overwrite.
-  const updates = new Map<string, { channelId: string; duration?: number; isShort?: boolean }>();
+  interface Update {
+    channelId: string;
+    duration?: number;
+    isShort?: boolean;
+    /** Always written when a pass touches this video — including `undefined`
+     *  to clear a stale `true` once a stream ends — so the write-back below
+     *  must apply it unconditionally rather than falling back with `??`,
+     *  which cannot tell "clear it" from "didn't touch it". */
+    isLive?: boolean;
+    isUpcoming?: boolean;
+  }
+  const updates = new Map<string, Update>();
   let cursor = 0;
 
   const worker = async (): Promise<void> => {
@@ -92,7 +115,7 @@ export async function backfillVideoDetails(
         // Mutating the cached object in place: `cache` is the same object the
         // caller merges its view from, so an open feed can repaint from it
         // without waiting for the storage round-trip.
-        const update: { channelId: string; duration?: number; isShort?: boolean } = { channelId };
+        const update: Update = { channelId };
         if (details.duration !== undefined && video.duration === undefined) {
           video.duration = details.duration;
           update.duration = details.duration;
@@ -101,6 +124,13 @@ export async function backfillVideoDetails(
           video.isShort = details.isShort;
           update.isShort = details.isShort;
         }
+        // Unlike duration and isShort, live/upcoming are transient — always
+        // take this pass's answer, including clearing a stale `true` back to
+        // unset once the stream has ended and stopped being either.
+        video.isLive = details.isLive;
+        video.isUpcoming = details.isUpcoming;
+        update.isLive = details.isLive;
+        update.isUpcoming = details.isUpcoming;
         updates.set(video.id, update);
         found++;
         onProgress?.();
@@ -143,6 +173,8 @@ export async function backfillVideoDetails(
           ...v,
           duration: update.duration ?? v.duration,
           isShort: update.isShort ?? v.isShort,
+          isLive: update.isLive,
+          isUpcoming: update.isUpcoming,
         };
       }),
     };

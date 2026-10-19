@@ -178,6 +178,10 @@ export interface InnertubeVideo {
   duration?: number;
   /** True for a Short, false for an ordinary video. */
   isShort?: boolean;
+  /** True while the stream is currently broadcasting live. */
+  isLive?: boolean;
+  /** True for a scheduled stream or premiere that has not started yet. */
+  isUpcoming?: boolean;
 }
 
 /**
@@ -193,10 +197,22 @@ export interface InnertubeVideo {
  *   duration: videoDetails.lengthSeconds — a string, hence the Number()
  *   isShort:  microformat.playerMicroformatRenderer.canonicalUrl contains
  *             "/shorts/" for a Short and "/watch?v=" for anything else
+ *   isLive:   videoDetails.isLive
+ *   isUpcoming: videoDetails.isUpcoming
  *
  * `isShortsEligible` sits right beside it and is NOT the same question — it
  * says a video could be shown as a Short, not that it is one — so the
  * canonical URL is what decides here.
+ *
+ * A live or upcoming video's own `lengthSeconds` is "0" — there is no length
+ * yet — which the duration check below already treats as "no duration",
+ * exactly the badge-less state a live video showed before `isLive` existed.
+ * `videoDetails.isLiveContent` is NOT what decides live/upcoming: it stays
+ * true for a stream that has already ended too (verified live, 2026-10-20,
+ * against a channel's /streams tab carrying one live, one upcoming and
+ * several ended broadcasts) — `isLive` and `isUpcoming` are the two that
+ * actually distinguish current state, and a finished broadcast has neither,
+ * which is correct: it is an ordinary video with a real duration by then.
  *
  * `playabilityStatus` commonly comes back UNPLAYABLE without a poToken; that
  * only concerns streaming, and the metadata this reads arrives regardless.
@@ -236,8 +252,12 @@ export async function videoViaInnertube(videoId: string): Promise<InnertubeVideo
   const canonical = get(json, 'microformat', 'playerMicroformatRenderer', 'canonicalUrl');
   const isShort = typeof canonical === 'string' ? canonical.includes('/shorts/') : undefined;
 
-  if (duration === undefined && isShort === undefined) return null;
-  return { duration, isShort };
+  const isLive = get(json, 'videoDetails', 'isLive') === true ? true : undefined;
+  const isUpcoming = get(json, 'videoDetails', 'isUpcoming') === true ? true : undefined;
+
+  if (duration === undefined && isShort === undefined && isLive === undefined && isUpcoming === undefined)
+    return null;
+  return { duration, isShort, isLive, isUpcoming };
 }
 
 /** The channel's Videos tab. Same standing as SEARCH_TAB_PARAMS: a hardcoded

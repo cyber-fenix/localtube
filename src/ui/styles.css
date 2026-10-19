@@ -1385,6 +1385,14 @@ html[data-localtube-theme='light'] { --lt-guide-divider: rgba(0, 0, 0, 0.2); }
   pointer-events: none;
 }
 
+/* LIVE's own fill, measured on a real thumbnail LIVE badge: rgba(225,0,45,0.9).
+   Upcoming reuses the plain .lt-duration fill above untouched — YouTube's own
+   "Upcoming" badge carries the same default dark style as a duration, not a
+   distinct colour, verified the same way. */
+.lt-duration.lt-live {
+  background: rgba(225, 0, 45, 0.9);
+}
+
 /* ------------------------------------------------------ watched progress */
 
 /* The watched bar across the bottom of a cover. Every value below measured on

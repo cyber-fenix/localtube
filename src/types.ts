@@ -27,6 +27,20 @@ export interface Video {
    * classification has not arrived.
    */
   isShort?: boolean;
+  /**
+   * True while this is a stream currently broadcasting live.
+   *
+   * The Atom feed cannot tell a live stream from an ordinary upload — it
+   * carries the same shape either way, with a real `published` date and no
+   * duration, which is exactly what made a live video look like a video
+   * LocalTube simply hadn't measured yet. Filled from the same Innertube
+   * player lookup that supplies `duration`; absent means "not classified",
+   * same convention as `isShort`.
+   */
+  isLive?: boolean;
+  /** True for a scheduled premiere or stream that has not started yet. Same
+   *  source and absent-means-unclassified convention as `isLive`. */
+  isUpcoming?: boolean;
   /** Epoch ms, set when the video is saved to a playlist. */
   addedAt?: number;
 }

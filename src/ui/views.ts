@@ -21,6 +21,7 @@ import {
   unsubscribe,
 } from '@/lib/subscriptions';
 import {
+  coverBadge,
   durationBadge,
   progressBar,
   progressFor,
@@ -758,7 +759,7 @@ function playlistVideoRow(
   img.alt = '';
   img.src = video.thumbnail;
   cover.appendChild(img);
-  const badge = durationBadge(video.duration ?? watched?.duration);
+  const badge = coverBadge(video, watched?.duration);
   if (badge) cover.appendChild(badge);
   const bar = progressBar(watchedFraction(watched));
   if (bar) cover.appendChild(bar);

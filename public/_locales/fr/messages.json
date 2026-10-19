@@ -709,5 +709,11 @@
   },
   "opt_channel_video_limit_label": {
     "message": "Conserver jusqu'à (vidéos par chaîne)"
+  },
+  "badge_live": {
+    "message": "EN DIRECT"
+  },
+  "badge_upcoming": {
+    "message": "À venir"
   }
 }

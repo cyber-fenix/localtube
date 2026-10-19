@@ -709,5 +709,11 @@
   },
   "opt_channel_video_limit_label": {
     "message": "Manter até (vídeos por canal)"
+  },
+  "badge_live": {
+    "message": "AO VIVO"
+  },
+  "badge_upcoming": {
+    "message": "Em breve"
   }
 }
